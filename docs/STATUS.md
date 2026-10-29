@@ -305,7 +305,64 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
   Notebook answers / themes / edit, New puzzle with theme cards, Theme entries,
   Settings → Drive. No layout regressions from the merge.
 
+### Session 6: one-step data import, .puz import
+- **Drive data import in one step** (`src/sync/driveImport.ts`): Settings → Import data
+  pack from Google Drive lists `Crossword Builder/data` (found under the root chosen in
+  Settings, id remembered as `driveIds.data`) and imports every data pack file in it
+  (`listDataPack`: classified by name, newest wins if a name appears twice, other files
+  ignored). Under `drive.file` the app may not see a folder the laptop made: then the
+  Picker asks once for the **data folder** (folder mode, opened in the root;
+  `pickFolder` gained a `parent` argument), and only if its files still can't be listed
+  does it fall back to selecting the files. Cancel at any step returns null (no message).
+- **Local files one at a time** (`src/ui/Settings.tsx`): picking files adds them to a
+  list of the five data pack files (ready / not picked · keeps what is stored); Import N
+  files runs one import; Clear empties it. Unknown file names are reported.
+- **Manifest merge** (`runImport` in `src/data/importCore.ts`): without `manifest.json`
+  the stored manifest is kept and only the counts of what was imported are replaced:
+  words / never-use from `words.tsv.gz`, clue answers / clues / clue range from
+  `clues.json.gz` (computed from the file), plus their file sizes. A words-only import no
+  longer resets the clue counts.
+- **.puz import** (`src/model/importGrid.ts`, pure; `src/ui/ImportGrid.tsx`): Puzzles →
+  New puzzle → Import (chips Blank grid / Import), From phone files or From Google Drive
+  (Picker, when connected). Uses `readPuz` (which now also reports `scrambled` and throws
+  on truncated files). Imports blocks, letters, rebus (GRBS/RTBL), circles (GEXT), clues
+  (matched to slots in .puz order), and clue notes written as `17A: note` lines (the
+  format Export .puz writes). Symmetry is detected from the blocks. Imported letters are
+  Editable or Locked (lock = theme letters; unlock per word with Lock word). Day, outlet
+  and title come from the dialog (title defaults to the file's). A preview card shows
+  the thumbnail and "15×15 · 78 clues · 30 of 191 squares filled · 1 circle"; a
+  **Not imported** box lists what was skipped: author/copyright, other notes, unknown
+  extra sections, non-letter characters, clue count mismatches, bad checksums, and a
+  scrambled solution (imported without letters). Status is set from the fill
+  (Theme draft / Filling / Cluing). Grids up to 25×25.
+- **Tests**: 148 unit tests (+8 .puz import in `tests/unit/importGrid.test.ts`, +6 Drive
+  import, +2 manifest merge). Playwright `tests/e2e/import.spec.ts` (×3 sizes, 33 tests
+  in all, passing): Drive import of the fixture pack with no Picker, local files picked
+  one at a time, New puzzle → Import a .puz with locked letters. Screenshots
+  `*-settings-drive-import.png`, `*-settings-local-files.png`, `*-new-puzzle-import.png`,
+  `*-imported-puzzle.png`.
+- **Not done: Crossword Compiler `.ccw` import.** The prompt asked to reverse-engineer
+  it from `fixtures/ccw/ccw-sample.ccw` and its matching `ccw-sample.puz`, but those
+  files are not in the repository (on any branch). Next session: add the pair to
+  `fixtures/ccw/` (synthetic content only, since the repo is public), then write
+  `src/model/ccw.ts` producing a `RawGrid` for `gridToPuzzle()` in `importGrid.ts`,
+  add `.ccw` to `IMPORT_ACCEPT` in `src/ui/ImportGrid.tsx` and the magic-byte check
+  (`A5 44 EF 01`) to `importGridFile()`. Known from the prompt: width and height are
+  32-bit ints at offsets 12 and 16; answers are length-prefixed lowercase strings with
+  clue records.
+
+#### Manual test steps (session 6, on the phone)
+1. Settings → Import data pack from Google Drive. If the app made the folder, the import
+   starts straight away. If the laptop made `data/`, the Picker asks for the data folder
+   once: pick it. Expect no file selection and the manifest with the real counts; the
+   next re-import needs no Picker. If Google doesn't share the folder's files with the
+   app through a folder pick, a second Picker asks for the files (select all).
+2. Import words.tsv.gz alone from phone files: clue counts in the manifest stay.
+3. New puzzle → Import → From phone files → a .puz from Across Lite or another app:
+   check grid, letters, clues, circles and rebus; try Locked.
+
 ## Next
+- `.ccw` import once `fixtures/ccw/` exists (see above).
 - Andrew tests on the Fold 8 (cover and inner screen) and on a real Google account (manual
   steps above), then a polish session for the issues he finds (`docs/SESSIONS.md`,
   session 5 template's "issues Andrew found" list).
@@ -341,5 +398,9 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
   that window. Deleting a puzzle on the phone does not delete its Drive backup.
 - Two `.score-badge` rule sets exist in `styles.css` (Fill rows from session 2, clue editor
   from session 3); the later one wins where they overlap. Looks right in both screens.
+- Drive data import: whether picking a folder in the Picker lets a `drive.file` app list
+  the files inside it is only tested with mocks (the fake Drive sees everything). The
+  file-selection fallback covers the case where it doesn't.
+- .puz import reads text as ISO-8859-1; v2.0 (UTF-8) files show accented characters wrong.
 - The production build has no fixtures (they're dev-only), so on the deployed site use
   Settings → Import data pack from files.

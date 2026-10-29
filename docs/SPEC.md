@@ -57,7 +57,10 @@ Out of scope for v1: accounts, collaboration, a server, grid design from scratch
   day · outlet, status pill (Theme draft, Themers set, Filling, Cluing, Submitted), last
   edited.
 - "New puzzle" floating button: size (15×15 default; 21×21 Sunday; custom), day, outlet,
-  optional start from a Notebook theme.
+  optional start from a Notebook theme. Or **Import**: a `.puz` (Crossword Compiler
+  `.ccw` planned) from the phone's files or Google Drive (Picker): grid, letters,
+  clues, circles, rebus, with an option to lock the imported letters; whatever can't be
+  imported is listed before Import.
 - Bottom nav: Puzzles, Notebook, Clues (the clue browser: look up any answer's history),
   Settings.
 
@@ -161,8 +164,11 @@ current cell, or moves back and clears. Block toggles the cell and its 180° par
 - Rotating or folding/unfolding keeps the current puzzle, selection and scroll state.
 
 ### 3.9 Settings
-- Data: import data pack (from Google Drive via the Picker, or from local files), show
-  manifest (word count, clue range, build date), re-import.
+- Data: import data pack from Google Drive in one step (every file in
+  `Crossword Builder/data`; the Picker only asks for the data folder once if the app
+  can't see it) or from local files (picked one at a time or together, then imported);
+  show manifest (word count, clue range, build date), re-import. A partial import without
+  `manifest.json` keeps the stored manifest and updates only the counts it imported.
 - Google Drive: connect / disconnect, folder name, last backup, "Back up now", restore.
 - Fill: per-length floors (defaults: 3–6 letters 30, 7+ letters 40), dupe-rule affix
   exceptions (default: TION, SION, INGS, NESS, MENT, ABLE, IEST, IERS), never-use list
