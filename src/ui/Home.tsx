@@ -10,6 +10,7 @@ import { Chips, Dialog, relativeTime } from './common';
 import { Thumb } from './Grid';
 import { BackupCard } from './Drive';
 import { IconClose, IconPlus, IconSearch } from './icons';
+import { ImportGridPane, useImported, type LoadedFile } from './ImportGrid';
 import { ThemePicker } from './ThemePicker';
 
 type Filter = 'All' | 'In progress' | 'Submitted';
@@ -103,7 +104,12 @@ export function Home() {
 
 type SizeChoice = '15×15' | '21×21' | 'Custom';
 
+type Mode = 'blank' | 'import';
+
 export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClose: () => void; themeId?: string }) {
+  const [mode, setMode] = useState<Mode>('blank');
+  const [file, setFile] = useState<LoadedFile | null>(null);
+  const [lock, setLock] = useState(false);
   const [size, setSize] = useState<SizeChoice>('15×15');
   const [w, setW] = useState(15);
   const [h, setH] = useState(15);
@@ -133,9 +139,18 @@ export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClo
       setDay('Sun');
     }
   };
+  const imported = useImported(file, { day, outlet: outlet.trim() || 'NYT', title, lock });
   const clamp = (n: number) => Math.max(3, Math.min(25, Math.round(n) || 3));
 
   const create = async () => {
+    if (mode === 'import') {
+      const p = imported.result?.puzzle;
+      if (!p) return;
+      await savePuzzle(p);
+      onClose();
+      navigate({ name: 'editor', id: p.id });
+      return;
+    }
     const theme = themes.find((t) => t.id === themeId);
     const p = newPuzzle({ width: w, height: h, day, outlet: outlet.trim() || 'NYT', title: title || theme?.title, themeId: theme?.id ?? null });
     await savePuzzle(p);
@@ -149,14 +164,29 @@ export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClo
       title="New puzzle"
       onClose={onClose}
       actions={
-        <button class="btn primary" onClick={create}>
-          Create
+        <button class="btn primary" onClick={create} disabled={mode === 'import' && !imported.result}>
+          {mode === 'import' ? 'Import' : 'Create'}
         </button>
       }
     >
-      <label class="label">Size</label>
-      <Chips label="Size" options={['15×15', '21×21', 'Custom'] as const} value={size} onChange={pickSize} />
-      {size === 'Custom' && (
+      <Chips
+        label="Start from"
+        options={[
+          { value: 'blank', label: 'Blank grid' },
+          { value: 'import', label: 'Import' },
+        ]}
+        value={mode}
+        onChange={setMode}
+      />
+      {mode === 'import' ? (
+        <ImportGridPane file={file} setFile={setFile} lock={lock} setLock={setLock} result={imported.result} error={imported.error} />
+      ) : (
+        <>
+          <label class="label">Size</label>
+          <Chips label="Size" options={['15×15', '21×21', 'Custom'] as const} value={size} onChange={pickSize} />
+        </>
+      )}
+      {mode === 'blank' && size === 'Custom' && (
         <div class="row">
           <input class="field num" type="number" min={3} max={25} value={w} aria-label="Width" onInput={(e) => setW(clamp(+(e.target as HTMLInputElement).value))} />
           <span>×</span>
@@ -176,8 +206,14 @@ export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClo
         <input class="field" placeholder="Outlet name" aria-label="Outlet name" value={outlet} onInput={(e) => setOutlet((e.target as HTMLInputElement).value)} />
       )}
       <label class="label">Title (optional)</label>
-      <input class="field" value={title} aria-label="Title" placeholder="Untitled puzzle" onInput={(e) => setTitle((e.target as HTMLInputElement).value)} />
-      {themes.length > 0 && (
+      <input
+        class="field"
+        value={title}
+        aria-label="Title"
+        placeholder={mode === 'import' ? (imported.result?.puzzle.title ?? 'Title from the file') : 'Untitled puzzle'}
+        onInput={(e) => setTitle((e.target as HTMLInputElement).value)}
+      />
+      {mode === 'blank' && themes.length > 0 && (
         <>
           <label class="label">Start from a Notebook theme (optional)</label>
           <ThemePicker themes={themes} value={themeId} onChange={setThemeId} width={w} />

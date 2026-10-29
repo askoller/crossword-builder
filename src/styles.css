@@ -1845,3 +1845,34 @@ p {
   align-items: baseline;
   gap: 4px;
 }
+
+/* ---------- New puzzle → Import ---------- */
+.row.wrap {
+  flex-wrap: wrap;
+}
+.import-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.import-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+.import-preview .title-line {
+  overflow-wrap: anywhere;
+}
+.notice-inline {
+  padding: 8px 12px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border-radius: 12px;
+  font-size: 13px;
+}
+.notice-inline ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

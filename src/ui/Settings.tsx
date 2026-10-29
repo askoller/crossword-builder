@@ -137,7 +137,7 @@ export function Settings() {
                   {manifest ? 'Re-import data pack from Google Drive' : 'Import data pack from Google Drive'}
                 </button>
               )}
-              <label class={`btn file-btn${authState.value === 'connected' ? '' : ' primary'}`}>
+              <label class={`btn file-btn${authState.value === 'connected' || stagedCount ? '' : ' primary'}`}>
                 {stagedCount ? 'Add another file' : manifest ? 'Re-import from files on this phone' : 'Import from files on this phone'}
                 <input type="file" multiple accept=".gz,.json,application/gzip,application/json" onChange={onFiles} />
               </label>

@@ -3,7 +3,7 @@
 // (title, author, copyright, clues in number order, notes), then extra sections:
 // GRBS + RTBL for rebus squares and GEXT for circles. Text is ISO-8859-1.
 import { computeSlots } from './grid';
-import type { Puzzle } from './types';
+import type { Cell, Puzzle } from './types';
 
 const MAGIC = 'ACROSS&DOWN\0';
 const VERSION = '1.3\0';
@@ -94,7 +94,7 @@ export interface PuzOptions {
 }
 
 /** Clue keys in .puz order: by number, Across before Down at the same number. */
-export function puzClueOrder(p: Puzzle): string[] {
+export function puzClueOrder(p: { width: number; height: number; cells: Pick<Cell, 'b'>[] }): string[] {
   const { slots } = computeSlots(p.width, p.height, p.cells);
   return slots
     .slice()
@@ -190,6 +190,8 @@ export interface PuzFile extends Strings {
   circles: Set<number>;
   /** every checksum in the file matched */
   checksumsOk: boolean;
+  /** the solution is scrambled (locked with a key in Across Lite) */
+  scrambled: boolean;
   sectionNames: string[];
 }
 
@@ -200,6 +202,7 @@ export function readPuz(bytes: Uint8Array): PuzFile {
   const h = bytes[0x2d];
   const nClues = v.getUint16(0x2e, true);
   const n = w * h;
+  if (!w || !h || HEADER + 2 * n > bytes.length) throw new Error('Truncated .puz');
   let at = HEADER;
   const solution = bytes.subarray(at, at + n);
   at += n;
@@ -265,6 +268,7 @@ export function readPuz(bytes: Uint8Array): PuzFile {
     rebus,
     circles,
     checksumsOk: ok,
+    scrambled: v.getUint16(0x32, true) !== 0,
     sectionNames: [...sections.keys()],
   };
 }
