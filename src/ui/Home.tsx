@@ -6,7 +6,8 @@ import { DAYS, type Day, type Puzzle, type Status } from '../model/types';
 import { dataVersion, navigate } from '../state/app';
 import { Chips, Dialog, relativeTime } from './common';
 import { Thumb } from './Grid';
-import { IconChevronRight, IconClose, IconCloud, IconPlus, IconSearch } from './icons';
+import { BackupCard } from './Drive';
+import { IconClose, IconPlus, IconSearch } from './icons';
 
 type Filter = 'All' | 'In progress' | 'Submitted';
 
@@ -62,14 +63,7 @@ export function Home() {
         )}
       </header>
       <div class="scroll">
-        <button class="card backup-card" onClick={() => navigate({ name: 'settings' })}>
-          <IconCloud />
-          <div>
-            <div class="strong">Not backed up yet</div>
-            <div class="muted">Connect Google Drive</div>
-          </div>
-          <IconChevronRight />
-        </button>
+        <BackupCard />
         <Chips label="Filter" options={['All', 'In progress', 'Submitted'] as const} value={filter} onChange={setFilter} />
         {puzzles && !puzzles.length && (
           <div class="empty">

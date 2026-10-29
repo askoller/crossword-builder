@@ -1,4 +1,5 @@
 import { route, navigate, updateReady, type Route } from '../state/app';
+import { PausedBanner } from './Drive';
 import { EditorScreen } from './Editor';
 import { Home } from './Home';
 import { IconClues, IconGrid, IconNotebook, IconSettings } from './icons';
@@ -52,6 +53,7 @@ export function App() {
           </button>
         </div>
       )}
+      <PausedBanner />
       {r.name === 'home' && <Home />}
       {r.name === 'settings' && <Settings />}
       {r.name === 'notebook' && <Placeholder title="Notebook" text="Answers, clue ideas and theme ideas, synced with ThemeFill. Coming in a later update." />}

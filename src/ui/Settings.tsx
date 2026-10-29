@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'preact/hooks';
 import { getSetting } from '../data/db';
 import { importDataPack, type ImportProgress, type StoredManifest } from '../data/import';
+import { authState } from '../google/auth';
+import { backupStatus } from '../sync/backup';
+import { importFromDrive } from '../sync/driveImport';
 import { dataVersion, updateReady } from '../state/app';
-import { IconCloud } from './icons';
+import { DriveSection } from './Drive';
 
 function fmtYmd(n: number): string {
   const s = String(n);
@@ -95,11 +98,16 @@ export function Settings() {
             </div>
           ) : (
             <div class="button-col">
-              <label class="btn primary file-btn">
+              {authState.value === 'connected' && !backupStatus.value.needsFolder && (
+                <button class="btn primary" onClick={() => void run(() => importFromDrive(setProgress))}>
+                  {manifest ? 'Re-import data pack from Google Drive' : 'Import data pack from Google Drive'}
+                </button>
+              )}
+              <label class={`btn file-btn${authState.value === 'connected' ? '' : ' primary'}`}>
                 {manifest ? 'Re-import data pack from files' : 'Import data pack from files'}
                 <input type="file" multiple accept=".gz,.json,application/gzip,application/json" onChange={onFiles} />
               </label>
-              <p class="muted small">Pick manifest.json, words.tsv.gz, clues.json.gz, my-scores.json and notebook.json from the Crossword Builder/data folder.</p>
+              <p class="muted small">Pick manifest.json, words.tsv.gz, clues.json.gz, my-scores.json and notebook.json from the Crossword Builder/data folder (multi-select).</p>
               {import.meta.env.DEV && (
                 <button class="btn" onClick={loadFixtures}>
                   Load fixtures (dev)
@@ -110,16 +118,7 @@ export function Settings() {
           {error && <p class="warn-text">Import failed: {error}</p>}
         </section>
 
-        <section class="card section">
-          <h2>Google Drive</h2>
-          <div class="row">
-            <IconCloud />
-            <div>
-              <div class="strong">Not connected</div>
-              <div class="muted small">Backup to the Crossword Builder folder is coming in a later update.</div>
-            </div>
-          </div>
-        </section>
+        <DriveSection />
 
         <section class="card section">
           <h2>Storage</h2>
