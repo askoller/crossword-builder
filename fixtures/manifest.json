@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "built": "2026-01-01T00:00:00+00:00",
+  "fixture": true,
+  "words": 270530,
+  "neverUse": 563,
+  "handRatings": 3,
+  "themeFillBans": 0,
+  "clueAnswers": 229,
+  "clues": 2016,
+  "clueRange": [
+    19950103,
+    20251222
+  ],
+  "files": {
+    "words.tsv.gz": 1506767,
+    "clues.json.gz": 13522,
+    "my-scores.json": 297,
+    "notebook.json": 924
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "scores": {
+    "BAGEL": {
+      "rating": 50,
+      "ts": 1700000000000,
+      "note": "fixture rating"
+    },
+    "TEAPARTY": {
+      "rating": 52,
+      "ts": 1700000000000,
+      "note": ""
+    },
+    "ERENOW": {
+      "rating": 30,
+      "ts": 1700000000000,
+      "note": ""
+    }
+  }
+}

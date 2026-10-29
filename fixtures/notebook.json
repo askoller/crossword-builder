@@ -1,0 +1,50 @@
+{
+  "clues": [
+    {
+      "answer": "BAGEL",
+      "clues": [
+        "Fixture idea: ring-shaped roll"
+      ],
+      "boost": 40,
+      "note": "",
+      "updated": 1700000000000
+    },
+    {
+      "answer": "TEA PARTY",
+      "clues": [
+        "Fixture idea: event with cups"
+      ],
+      "boost": 70,
+      "note": "synthetic",
+      "updated": 1700000000000
+    }
+  ],
+  "themes": [
+    {
+      "id": "fixture-theme-1",
+      "title": "Fixture theme",
+      "description": "Synthetic theme for tests",
+      "revealer": {
+        "answer": "TEAPARTY",
+        "clues": [
+          "Fixture revealer clue"
+        ]
+      },
+      "entries": [
+        {
+          "answer": "SPOUSE",
+          "clues": [
+            "Fixture entry clue"
+          ]
+        },
+        {
+          "answer": "NATION",
+          "clues": []
+        }
+      ],
+      "updated": 1700000000000
+    }
+  ],
+  "deleted": [],
+  "synced": 0
+}
