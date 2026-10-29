@@ -102,9 +102,17 @@ export function notebookKey(item: { answer?: string; id?: string }, kind: 'answe
 }
 
 /** Import whatever data pack files are given. Missing files leave existing data alone. */
+/**
+ * Import whatever data pack files are given. Missing files leave existing data alone.
+ * Without manifest.json the stored manifest is kept and only the counts of what was
+ * imported are replaced (word counts from words.tsv.gz, clue counts from clues.json.gz),
+ * so importing files one at a time never resets the others' numbers.
+ */
 export async function runImport(files: DataPackFiles, progress: (p: ImportProgress) => void = () => {}): Promise<StoredManifest | null> {
   const db = await openDb();
   let manifest: Manifest | null = null;
+  let patch: Partial<Manifest> | null = null;
+  const sizes: Record<string, number> = {};
   if (files.manifest) manifest = JSON.parse(await readText(files.manifest)) as Manifest;
 
   if (files.words) {
@@ -115,15 +123,14 @@ export async function runImport(files: DataPackFiles, progress: (p: ImportProgre
     await tx.store.clear();
     for (const c of chunks.values()) await tx.store.put(c);
     await tx.done;
-    if (!manifest) {
-      let words = 0;
-      let neverUse = 0;
-      for (const c of chunks.values()) {
-        words += c.count;
-        for (const s of c.score) if (s === 1) neverUse++;
-      }
-      manifest = { format: 1, built: '', words, neverUse, handRatings: 0, themeFillBans: 0, clueAnswers: 0, clues: 0, clueRange: [0, 0], files: {} };
+    let words = 0;
+    let neverUse = 0;
+    for (const c of chunks.values()) {
+      words += c.count;
+      for (const s of c.score) if (s === 1) neverUse++;
     }
+    patch = { ...patch, words, neverUse };
+    sizes['words.tsv.gz'] = files.words.size;
   }
   progress({ phase: 'clues', fraction: 0.3, message: 'Reading clue history' });
 
@@ -132,6 +139,17 @@ export async function runImport(files: DataPackFiles, progress: (p: ImportProgre
     const entries = Object.entries(data);
     progress({ phase: 'clues', fraction: 0.4, message: `Saving clues for ${entries.length.toLocaleString('en-US')} answers` });
     await db.clear('clues');
+    let clues = 0;
+    let lo = 0;
+    let hi = 0;
+    for (const [, list] of entries) {
+      clues += list.length;
+      for (const [, ymd] of list) {
+        if (!ymd) continue;
+        if (!lo || ymd < lo) lo = ymd;
+        if (ymd > hi) hi = ymd;
+      }
+    }
     for (let i = 0; i < entries.length; i += CLUE_BATCH) {
       const tx = db.transaction('clues', 'readwrite');
       for (const [answer, list] of entries.slice(i, i + CLUE_BATCH)) void tx.store.put(list, answer);
@@ -142,6 +160,8 @@ export async function runImport(files: DataPackFiles, progress: (p: ImportProgre
         message: `Saving clues ${Math.min(entries.length, i + CLUE_BATCH).toLocaleString('en-US')} of ${entries.length.toLocaleString('en-US')}`,
       });
     }
+    patch = { ...patch, clueAnswers: entries.length, clues, clueRange: [lo, hi] };
+    sizes['clues.json.gz'] = files.clues.size;
   }
 
   progress({ phase: 'notebook', fraction: 0.96, message: 'Notebook and ratings' });
@@ -160,6 +180,14 @@ export async function runImport(files: DataPackFiles, progress: (p: ImportProgre
       for (const t of nb.themes ?? []) void tx.store.put(t, notebookKey(t, 'theme'));
       await tx.done;
     }
+  }
+
+  if (!manifest && patch) {
+    const old = await db.get('settings', 'manifest') as StoredManifest | undefined;
+    const base: Manifest = old
+      ? (({ importedAt: _i, ...m }) => m)(old)
+      : { format: 1, built: '', words: 0, neverUse: 0, handRatings: 0, themeFillBans: 0, clueAnswers: 0, clues: 0, clueRange: [0, 0], files: {} };
+    manifest = { ...base, ...patch, files: { ...base.files, ...sizes } };
   }
 
   let stored: StoredManifest | null = null;

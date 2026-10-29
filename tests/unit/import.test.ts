@@ -81,4 +81,19 @@ describe('data pack import', () => {
     expect(await db.get('clues', 'ERA')).toEqual([['Long time', 20240101, 0]]);
     expect(lexiconWord((await db.get('lexicon', 5))!, 0)).toBe('XYZZY');
   });
+
+  it('merges a words-only import into the stored manifest instead of resetting clue counts', async () => {
+    const full = await runImport({ manifest: blob('manifest.json'), words: blob('words.tsv.gz'), clues: blob('clues.json.gz') });
+    const m = (await runImport({ words: await gz('word\tscore\tnyt\tlast\nERA\t40\t500\t2025\nXYZZY\t1\t0\t\n') }))!;
+    expect(m).toMatchObject({ words: 2, neverUse: 1, clues: full!.clues, clueAnswers: full!.clueAnswers, clueRange: full!.clueRange, built: full!.built });
+    expect(m.files['clues.json.gz']).toBe(full!.files['clues.json.gz']);
+    expect(await getSetting<StoredManifest>('manifest')).toMatchObject({ words: 2, clues: full!.clues });
+  });
+
+  it('counts clues from clues.json.gz when it is imported without a manifest', async () => {
+    await runImport({ manifest: blob('manifest.json') });
+    const m = (await runImport({ clues: await gz(JSON.stringify({ ERA: [['Long time', 20240101, 0], ['Age', 19990302, 1]], OBOE: [['Reed', 20100505, 2]] })) }))!;
+    expect(m).toMatchObject({ clueAnswers: 2, clues: 3, clueRange: [19990302, 20240101] });
+    expect(m.words).toBe(JSON.parse(readFileSync(join(FIXTURES, 'manifest.json'), 'utf8')).words);
+  });
 });
