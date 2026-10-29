@@ -7,6 +7,7 @@ import * as ed from '../model/editor';
 import { applyDiff, makeDiff, pushDiff, redo as redoStep, undo as undoStep, type History } from '../model/history';
 import type { Cell, Clue, Puzzle, Slot } from '../model/types';
 import { FillController } from './fill';
+import { registerFlush } from '../sync';
 
 export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | 'theme' | null;
 
@@ -27,6 +28,7 @@ export class EditorSession {
   readonly fill: FillController;
   private readonly autosaver: Autosaver;
   private lastSnapshot = Date.now();
+  private readonly unregisterFlush: () => void;
 
   constructor(p: Puzzle, h: History) {
     this.puzzle = signal(p);
@@ -53,6 +55,8 @@ export class EditorSession {
     });
     this.autosaver.attach();
     this.fill = new FillController(this);
+    // Going to the background: write pending edits before the Drive upload runs.
+    this.unregisterFlush = registerFlush(() => this.flush());
   }
 
   static async open(id: string): Promise<EditorSession | null> {
@@ -188,5 +192,6 @@ export class EditorSession {
     this.fill.dispose();
     await this.autosaver.flush();
     this.autosaver.dispose();
+    this.unregisterFlush();
   }
 }

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { deletePuzzle, duplicatePuzzle } from '../data/puzzles';
 import { slotLabel, slotPattern } from '../model/grid';
+import { exportPuz, puzzleFileBase } from '../model/puz';
+import { authState } from '../google/auth';
+import { backupStatus } from '../sync/backup';
 import { DAYS, STATUSES, SYMMETRIES, type Day, type Puzzle, type Status, type Symmetry } from '../model/types';
 import { navigate, wide } from '../state/app';
 import { EditorSession, type PanelName } from '../state/editor';
@@ -110,9 +113,26 @@ function saveText(s: EditorSession): string {
       return 'Saving…';
     case 'error':
       return 'Not saved · retrying';
-    default:
+    default: {
+      const last = backupStatus.value.lastBackup;
+      if (authState.value === 'paused') return 'Saved on phone · Backup paused';
+      if (authState.value === 'connected' && last) return `Saved · Drive ${relativeTime(last)}`;
       return `Saved on phone · ${relativeTime(s.savedAt.value)}`;
+    }
   }
+}
+
+/** Save the puzzle as an Across Lite file (downloads on Android, desktop alike). */
+function downloadPuz(p: Puzzle): void {
+  const blob = new Blob([exportPuz(p) as BlobPart], { type: 'application/x-crossword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${puzzleFileBase(p)}.puz`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 function EditorHeader({ s }: { s: EditorSession }) {
@@ -130,7 +150,7 @@ function EditorHeader({ s }: { s: EditorSession }) {
     { label: 'Rename', onSelect: () => setDialog('rename') },
     { label: 'Puzzle settings', onSelect: () => setDialog('settings') },
     { label: 'Theme entries', onSelect: () => (s.panel.value = 'theme') },
-    { label: 'Export .puz', onSelect: () => {}, disabled: true, hint: 'Coming soon' },
+    { label: 'Export .puz', hint: 'Across Lite, with clues', onSelect: () => downloadPuz(s.puzzle.value) },
     {
       label: 'Duplicate',
       onSelect: async () => {

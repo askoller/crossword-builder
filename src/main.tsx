@@ -9,9 +9,13 @@ import { render } from 'preact';
 import { registerSW } from 'virtual:pwa-register';
 import { getSetting, setSetting } from './data/db';
 import { updateReady } from './state/app';
+import { startSync } from './sync';
 import { App } from './ui/App';
 
 render(<App />, document.getElementById('app')!);
+
+// Drive backup and Notebook sync; local editing never waits on it.
+void startSync();
 
 // Ask the browser not to evict our data (SPEC §5.1); remember that we asked.
 void (async () => {
