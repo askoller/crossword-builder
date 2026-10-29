@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { getSetting } from '../data/db';
 import { importDataPack, type ImportProgress, type StoredManifest } from '../data/import';
 import { dataVersion, updateReady } from '../state/app';
+import { FillSettingsSection } from './FillSettings';
 import { IconCloud } from './icons';
 
 function fmtYmd(n: number): string {
@@ -120,6 +121,8 @@ export function Settings() {
             </div>
           </div>
         </section>
+
+        <FillSettingsSection neverUseInPack={manifest?.neverUse} />
 
         <section class="card section">
           <h2>Storage</h2>

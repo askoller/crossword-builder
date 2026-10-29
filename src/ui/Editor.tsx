@@ -4,7 +4,10 @@ import { slotLabel, slotPattern } from '../model/grid';
 import { DAYS, STATUSES, SYMMETRIES, type Day, type Puzzle, type Status, type Symmetry } from '../model/types';
 import { navigate, wide } from '../state/app';
 import { EditorSession, type PanelName } from '../state/editor';
+import { AutofillPanel, SelectBanner } from './AutofillPanel';
+import { CheckPanel } from './CheckPanel';
 import { Chips, Dialog, Menu, relativeTime, Sheet, type MenuItem } from './common';
+import { FillPanel } from './FillPanel';
 import { Grid } from './Grid';
 import {
   IconAutofill,
@@ -267,6 +270,7 @@ function SettingsDialog({ s, onClose }: { s: EditorSession; onClose: () => void 
 function ClueBar({ s }: { s: EditorSession }) {
   const slot = s.currentSlot.value;
   const p = s.puzzle.value;
+  if (s.fill.selectMode.value) return <SelectBanner s={s} />;
   if (s.rebusMode.value) {
     return (
       <div class="cluebar rebus">
@@ -311,8 +315,17 @@ function ToolRow({ s, wide: isWide = false }: { s: EditorSession; wide?: boolean
   const [blockMenu, setBlockMenu] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longFired = useRef(false);
-  const open = (name: PanelName) => () => (s.panel.value = s.panel.value === name ? null : name);
-  const active = s.panel.value;
+  const open = (name: PanelName) => () => {
+    if (name === 'select') {
+      if (s.fill.selectMode.value) s.fill.exitSelect();
+      else s.fill.enterSelect();
+      return;
+    }
+    s.panel.value = s.panel.value === name ? null : name;
+  };
+  const active = s.fill.selectMode.value ? 'select' : s.panel.value;
+  const matches = s.fill.list.value?.atFloor;
+  const issues = s.fill.report.value?.count ?? 0;
 
   const blockDown = () => {
     longFired.current = false;
@@ -331,19 +344,20 @@ function ToolRow({ s, wide: isWide = false }: { s: EditorSession; wide?: boolean
     timer.current = null;
   };
 
-  const tool = (name: Exclude<PanelName, null>, label: string, Icon: typeof IconFill, extra = '') => (
-    <button class={`tool${active === name ? ' on' : ''} ${extra}`} onClick={open(name)} aria-pressed={active === name}>
+  const tool = (name: Exclude<PanelName, null>, label: string, Icon: typeof IconFill, extra = '', badge?: string) => (
+    <button class={`tool${active === name ? ' on' : ''} ${extra}`} onClick={open(name)} aria-pressed={active === name} aria-label={label}>
       <Icon />
       <span>{label}</span>
+      {badge && <span class={`tool-badge${name === 'check' ? ' warn' : ''}`}>{badge}</span>}
     </button>
   );
 
   return (
     <div class={`toolrow${isWide ? ' toolrow-wide' : ''}`}>
       {tool('select', 'Select', IconSelect, 'tool-select')}
-      {!isWide && tool('fill', 'Fill', IconFill, 'tool-primary')}
+      {!isWide && tool('fill', 'Fill', IconFill, 'tool-primary', matches === undefined ? undefined : matches > 999 ? '999+' : String(matches))}
       {tool('autofill', 'Autofill', IconAutofill)}
-      {tool('check', 'Check', IconCheck)}
+      {tool('check', 'Check', IconCheck, '', issues ? String(issues) : undefined)}
       {!isWide && tool('clue', 'Clue', IconClue)}
       <button
         class="tool"
@@ -379,25 +393,36 @@ function ToolRow({ s, wide: isWide = false }: { s: EditorSession; wide?: boolean
   );
 }
 
-const PLACEHOLDERS: Record<Exclude<PanelName, null>, { title: string; text: string }> = {
-  select: {
-    title: 'Select squares',
-    text: 'Select squares to autofill just that part of the grid. This arrives with the fill engine.',
-  },
-  fill: { title: 'Fill suggestions', text: 'Ranked words for this slot arrive with the fill engine.' },
-  autofill: { title: 'Autofill', text: 'Whole-grid and selection autofill arrive with the fill engine.' },
-  check: { title: 'Check', text: 'Duplicate rules, crossing viability and grid stats arrive with the fill engine.' },
-  clue: { title: 'Clue', text: 'The clue editor with NYT clue history arrives with the clue data import.' },
-};
+const CLUE_PLACEHOLDER = 'The clue editor with NYT clue history arrives with the clue data import.';
 
 function PanelSheet({ s }: { s: EditorSession }) {
   const name = s.panel.value;
   if (!name) return null;
-  const ph = PLACEHOLDERS[name];
-  const slot = s.currentSlot.value;
+  const close = () => (s.panel.value = null);
+  if (name === 'fill') {
+    return (
+      <div class="sheet tall" role="dialog" aria-label="Fill suggestions">
+        <FillPanel s={s} onClose={close} />
+      </div>
+    );
+  }
+  if (name === 'autofill') {
+    return (
+      <div class="sheet tall" role="dialog" aria-label="Autofill">
+        <AutofillPanel s={s} onClose={close} />
+      </div>
+    );
+  }
+  if (name === 'check') {
+    return (
+      <div class="sheet tall" role="dialog" aria-label="Check">
+        <CheckPanel s={s} onClose={close} />
+      </div>
+    );
+  }
   return (
-    <Sheet title={name === 'fill' && slot ? `${slotLabel(slot)} · ${slot.cells.length} letters` : ph.title} onClose={() => (s.panel.value = null)}>
-      <p class="placeholder">{ph.text}</p>
+    <Sheet title="Clue" onClose={close}>
+      <p class="placeholder">{CLUE_PLACEHOLDER}</p>
     </Sheet>
   );
 }
@@ -408,41 +433,44 @@ function SidePanel({ s }: { s: EditorSession }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>('Fill');
   const name = s.panel.value;
   const slot = s.currentSlot.value;
-  if (name && name !== 'fill' && name !== 'clue') {
-    const ph = PLACEHOLDERS[name];
-    return (
-      <div class="side-panel">
-        <Sheet title={ph.title} onClose={() => (s.panel.value = null)}>
-          <p class="placeholder">{ph.text}</p>
-        </Sheet>
-      </div>
-    );
+  const close = () => (s.panel.value = null);
+  if (name === 'autofill' || name === 'check') {
+    return <div class="side-panel">{name === 'autofill' ? <AutofillPanel s={s} onClose={close} /> : <CheckPanel s={s} onClose={close} />}</div>;
   }
-  const text =
-    tab === 'Fill'
-      ? 'The full suggestion table for the selected slot arrives with the fill engine.'
-      : tab === 'Clues'
-        ? 'Clue history for the selected entry arrives with the clue data import.'
-        : 'Theme entries from the Notebook arrive with the Notebook.';
+  const current = name === 'clue' ? 'Clues' : tab;
+  const text = current === 'Clues' ? 'Clue history for the selected entry arrives with the clue data import.' : 'Theme entries from the Notebook arrive with the Notebook.';
   return (
     <div class="side-panel">
       <div class="tabs" role="tablist">
         {TABS.map((t) => (
-          <button key={t} role="tab" aria-selected={t === tab} class={`tab${t === tab ? ' on' : ''}`} onClick={() => setTab(t)}>
+          <button
+            key={t}
+            role="tab"
+            aria-selected={t === current}
+            class={`tab${t === current ? ' on' : ''}`}
+            onClick={() => {
+              setTab(t);
+              if (name === 'clue') s.panel.value = null;
+            }}
+          >
             {t}
           </button>
         ))}
       </div>
-      <div class="panel-body">
-        {slot && (
-          <div class="panel-slot">
-            <span class="cluebar-label">{slotLabel(slot)}</span>
-            <span class="mono pattern">{slotPattern(s.puzzle.value.cells, slot)}</span>
-            <span class="muted">{slot.cells.length} letters</span>
-          </div>
-        )}
-        <p class="placeholder">{text}</p>
-      </div>
+      {current === 'Fill' ? (
+        <FillPanel s={s} wide />
+      ) : (
+        <div class="panel-body">
+          {slot && (
+            <div class="panel-slot">
+              <span class="cluebar-label">{slotLabel(slot)}</span>
+              <span class="mono pattern">{slotPattern(s.puzzle.value.cells, slot)}</span>
+              <span class="muted">{slot.cells.length} letters</span>
+            </div>
+          )}
+          <p class="placeholder">{text}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -480,6 +508,7 @@ function usePhysicalKeyboard(s: EditorSession) {
       else if (k === 'Enter' && s.rebusMode.value) s.toggleRebus();
       else if (k === 'Escape') {
         if (s.rebusMode.value) s.toggleRebus();
+        else if (s.fill.selectMode.value) s.fill.exitSelect();
         else s.panel.value = null;
       } else return;
       e.preventDefault();

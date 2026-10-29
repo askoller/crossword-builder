@@ -33,7 +33,7 @@ test('home and editor screenshots', async ({ page }) => {
   await page.evaluate(() => document.fonts.ready);
   await shot(page, 'editor');
 
-  await page.getByRole('button', { name: 'Fill' }).or(page.getByRole('tab', { name: 'Fill' })).first().click();
+  await page.getByRole('button', { name: 'Fill', exact: true }).or(page.getByRole('tab', { name: 'Fill' })).first().click();
   await shot(page, 'editor-panel');
 });
 

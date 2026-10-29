@@ -6,6 +6,7 @@ import { computeSlots, type SlotIndex } from '../model/grid';
 import * as ed from '../model/editor';
 import { applyDiff, makeDiff, pushDiff, redo as redoStep, undo as undoStep, type History } from '../model/history';
 import type { Cell, Clue, Puzzle, Slot } from '../model/types';
+import { FillController } from './fill';
 
 export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | null;
 
@@ -22,6 +23,8 @@ export class EditorSession {
   readonly currentSlot: ReadonlySignal<Slot | null>;
   readonly canUndo: ReadonlySignal<boolean>;
   readonly canRedo: ReadonlySignal<boolean>;
+  /** fill suggestions, select mode, autofill and Check */
+  readonly fill: FillController;
   private readonly autosaver: Autosaver;
   private lastSnapshot = Date.now();
 
@@ -49,6 +52,7 @@ export class EditorSession {
       if (s === 'saved') this.savedAt.value = Date.now();
     });
     this.autosaver.attach();
+    this.fill = new FillController(this);
   }
 
   static async open(id: string): Promise<EditorSession | null> {
@@ -181,6 +185,7 @@ export class EditorSession {
   }
 
   async close(): Promise<void> {
+    this.fill.dispose();
     await this.autosaver.flush();
     this.autosaver.dispose();
   }
