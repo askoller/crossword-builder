@@ -3,10 +3,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { closeDb, DB_NAME, getSetting, openDb } from '../../src/data/db';
-import { classifyFiles, lexiconWord, parseWords, runImport, type StoredManifest } from '../../src/data/importCore';
+import { classifyFiles, lexiconWord, parseWords, readText, runImport, type StoredManifest } from '../../src/data/importCore';
 import { FIXTURES } from './helpers';
 
 const blob = (name: string) => new Blob([readFileSync(join(FIXTURES, name))]);
+const gz = async (text: string) => new Response(new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).blob();
 
 beforeEach(async () => {
   await closeDb();
@@ -65,5 +66,19 @@ describe('data pack import', () => {
     expect(await db.count('clues')).toBe(manifest.clueAnswers);
     expect(await db.get('notebook', 'answer:TEAPARTY')).toBeTruthy();
     expect(await db.get('notebook', 'theme:fixture-theme-1')).toBeTruthy();
+  });
+
+  it('reads gzip and plain text alike', async () => {
+    expect(await readText(await gz('hello\tworld'))).toBe('hello\tworld');
+    expect(await readText(new Blob(['plain']))).toBe('plain');
+  });
+
+  it('imports a pack without a manifest and keeps existing clues when clues are missing', async () => {
+    await runImport({ clues: await gz(JSON.stringify({ ERA: [['Long time', 20240101, 0]] })) });
+    const m = await runImport({ words: await gz('word\tscore\tnyt\tlast\r\nERA\t40\t500\t2025\r\nXYZZY\t1\t0\t\r\n') });
+    expect(m).toMatchObject({ words: 2, neverUse: 1 });
+    const db = await openDb();
+    expect(await db.get('clues', 'ERA')).toEqual([['Long time', 20240101, 0]]);
+    expect(lexiconWord((await db.get('lexicon', 5))!, 0)).toBe('XYZZY');
   });
 });
