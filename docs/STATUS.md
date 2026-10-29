@@ -75,6 +75,92 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
   and checks typing, symmetric blocks, undo/redo across a reload, Space and tap direction
   switches.
 
+### Session 4: Google Drive backup, Picker import, .puz
+- **Config** (`src/config.ts`): OAuth client ID, Picker API key (restricted to the Picker API
+  and this site), project number as the Picker app ID, scope `drive.file`. Public by design.
+- **Sign-in** (`src/google/auth.ts`): GIS token client loaded on demand
+  (`src/google/loader.ts`). Connect (consent) / resume / disconnect (revokes). Token + expiry
+  kept in `settings` (`googleToken`, `googleConnected`), so a reload within the hour stays
+  connected with no network. Silent renewal (`prompt: ''`) 5 min before expiry; if Google
+  needs a tap, `authState` becomes `paused` and nothing retries in the background until
+  Andrew taps "Backup paused · tap to resume" (banner on every tab screen, Home card,
+  Settings, and "Saved on phone · Backup paused" in the editor header).
+- **Drive client** (`src/google/drive.ts`): fetch-only Drive v3 (list with paging, folders,
+  multipart create, multipart PATCH in place, download). One retry with a fresh token on 401.
+- **Folder** (`src/sync/backup.ts`): under `drive.file` the app can only find a
+  "Crossword Builder" folder it made itself. If none is visible, Settings asks
+  **Choose existing folder** (Picker, folder mode; for the folder the laptop already made)
+  or **Create new folder**, so there are never two folders with the same name. `puzzles/`
+  is created inside. Ids are remembered in `settings.driveIds`.
+- **Backup**: `savePuzzle()` now also queues the puzzle in `outbox` in the same transaction
+  (one row per puzzle), so every local save, new puzzle, duplicate and restore is queued.
+  The outbox uploads `puzzles/<slug>-<id8>.json` and `.puz` (tagged with
+  `appProperties {puzzleId, kind}`, updated in place and renamed with the title; found again
+  by tag after a reinstall; re-created if deleted in Drive) every 3 minutes, on
+  `visibilitychange` → hidden / `pagehide` (after the open editor flushes its autosave),
+  on `online`, and on connect/resume. Offline, signed out or paused it just waits. Edits
+  made during an upload stay queued.
+- **Restore**: Settings → Restore from Drive lists `puzzles/*.json`; restore one or all.
+  A puzzle that also exists locally is snapshotted (`reason: 'import'`) before being replaced.
+- **Picker import** (`src/google/picker.ts`, `src/sync/driveImport.ts`): Settings →
+  "Import data pack from Google Drive" (when connected) opens the Picker multi-select at
+  the root folder (the laptop-made `data/` is one tap in), downloads the picked files and
+  calls `importDataPack()` (downloads are the first 30% of the progress bar).
+- **Notebook sync** (`src/sync/notebookSync.ts`): `Crossword Builder/notebook.json`. Created
+  the first time from the data pack notebook (`settings.datapackNotebook`) merged with the
+  local Notebook; otherwise download → merge into local → write back in place (same file
+  id) only if the content changed. Runs on start/connect, on returning to the foreground,
+  on `online`, and every 2 min while `#/notebook` is open (`src/sync/index.ts`). A remote
+  file that isn't valid JSON is reported and never overwritten.
+- **Notebook contract**: session 3 isn't merged yet, so `src/model/notebook.ts`,
+  `src/data/notebook.ts` and `tests/unit/notebook.test.ts` are **byte-identical copies** of
+  session 3's files (its `mergeNotebooks`, `mergeIntoLocal`, tombstones under
+  `deleted:<key>`). Git merges identical additions cleanly; if session 3 changes them before
+  merging, take session 3's version.
+- **.puz** (`src/model/puz.ts`): Across Lite 1.3 writer with all header checksums, clues in
+  number order (Across first at a shared number), clue notes as the notes string, rebus via
+  GRBS/RTBL, circles via GEXT, ISO-8859-1 text (curly quotes/dashes → ASCII). Unfilled
+  squares are `-` in the solution. Reader used for round-trip tests; output also verified
+  once by hand with the independent Python reader `puzpy` (checksums valid, rebus and
+  circles read). Editor overflow → Export .puz downloads `<slug>-<id8>.puz`; backups upload
+  it next to the JSON.
+- **UI** (`src/ui/Drive.tsx`): Settings → Google Drive section, Home backup card
+  ("Backed up to Google Drive · Crossword Builder folder · 2 min ago" / "Not backed up yet ·
+  Connect Google Drive" / "Backup paused · Tap to sign in" / "Choose a Drive folder"),
+  paused banner, restore dialog. Editor header shows "Saved · Drive 2 min ago" when connected.
+- **Tests**: unit tests mock Google entirely — `tests/unit/fakeDrive.ts` is an in-memory
+  Drive behind a fake fetch, GIS is a stubbed `window.google`. Covered: .puz checksums,
+  round trip of all fixture grids, rebus/circles, corruption detection, Latin-1; folder
+  choose/create/reuse; outbox queueing, upload, in-place update + rename, lookup by tag,
+  re-create after delete, offline/paused waits, error keeps queue, 401 retry, edits during
+  upload; restore one (with snapshot) and all; notebook create/merge/tombstones/no-op/
+  re-create/broken file; sign-in connect/silent renew/pause/resume/restore/disconnect/denied;
+  Drive import of the fixtures through the Picker path. Playwright `tests/e2e/drive.spec.ts`
+  mocks GIS and the Drive REST endpoints: export .puz, connect, create folder, back up,
+  restore dialog, Home card; screenshots `*-settings-drive-*.png`, `*-home-backed-up.png`.
+
+#### Manual test steps (real Google account, on the phone)
+1. Google Cloud console: the OAuth client must list `https://askoller.github.io` as an
+   authorized JavaScript origin (and `http://localhost:5173` for dev); the API key must
+   allow `askoller.github.io/*` and the Picker API; the Drive API must be enabled. While
+   the consent screen is in "Testing", Andrew's account must be a test user.
+2. Settings → Connect Google Drive → consent. If the laptop already made
+   `Crossword Builder`, tap **Choose existing folder** and pick it; otherwise **Create new
+   folder**. Expect "Last backup just now" and `puzzles/` with a `.json` and `.puz` per puzzle.
+3. Edit a puzzle, switch apps: within seconds the Drive file's modified time updates. Rename
+   the puzzle: the Drive files are renamed, not duplicated.
+4. Airplane mode, edit, reconnect: the change uploads (Home card goes back to "Backed up").
+5. Settings → Import data pack from Google Drive → open `data/`, select all five files →
+   import completes; the manifest shows the real counts.
+6. `notebook.json` appears in the folder. Edit it from the laptop (ThemeFill), return to the
+   app: the Notebook shows the change; edit in the app: the laptop file updates in place.
+7. Open the downloaded `.puz` from Export .puz in Across Lite (or puzpy): grid, clues,
+   rebus and circles appear.
+8. Restore: clear the site data in Chrome (or use a second phone), connect, choose
+   the same folder, Restore from Drive → Restore all. Puzzles come back.
+9. Leave the app idle for over an hour, then edit: either it renews silently or the
+   "Backup paused · tap to resume" banner appears; tapping it resumes and uploads.
+
 ## Next
 - Sessions 2, 3 and 4 (see `docs/SESSIONS.md`), in parallel.
 - Session 2: the engine reads the lexicon with `openDb().get('lexicon', len)` (packed
@@ -86,10 +172,14 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
 - Session 3: import already exists and works from local files; move on to clues and the
   Notebook. Clue text can be written with `EditorSession.commit(new Map(), cluesMap)`
   (undoable). The Clues tab in the bottom nav and the Notebook are placeholders.
-- Session 4: call `importDataPack(files)` from the Picker; the pack notebook for seeding
-  Drive is in `settings.datapackNotebook`. The `outbox` store exists but nothing writes to
-  it yet. Home backup card and Settings → Google Drive are static placeholders.
-  "Export .puz" in the editor overflow is disabled.
+- Session 4: done on its branch (see above).
+- Session 5 (merge): session 3 and session 4 both add `src/model/notebook.ts`,
+  `src/data/notebook.ts` and `tests/unit/notebook.test.ts` with identical content. Session 4
+  touches `src/data/puzzles.ts` (`savePuzzle` queues the outbox), `src/state/editor.ts`
+  (flush hook), `src/ui/{App,Home,Settings,Editor}.tsx`, `src/main.tsx` and appends CSS
+  at the end of `styles.css`. When the real Notebook screen lands on `#/notebook`, the
+  2-minute sync already runs there; it should also re-read on `notebookVersion` (it does,
+  since `writeNotebook` bumps it).
 
 ## Known issues
 - Screen sizes for the Fold 8 are estimates; check on the device. The fixed-height panel
@@ -99,5 +189,10 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
 - Rebus entry uses a mode: long-press Block → Rebus (or Rebus on the inner screen), type
   letters, tap the clue bar or press Enter to finish.
 - No Notebook UI yet, so "Start from a Notebook theme" only sets `themeId` and the title.
+- Drive: the real Google flow (consent, Picker, folder pick granting access under
+  `drive.file`) is only tested with mocks here; follow the manual steps above.
+- Drive: if the laptop and the app write `notebook.json` within the same second, the last
+  write wins for that round; the next sync merges again, but an edit could be lost in
+  that window. Deleting a puzzle on the phone does not delete its Drive backup.
 - The production build has no fixtures (they're dev-only), so on the deployed site use
   Settings → Import data pack from files.
