@@ -19,13 +19,20 @@ export async function getHistory(id: string): Promise<History> {
   return (await (await openDb()).get('history', id)) ?? emptyHistory(id);
 }
 
-/** Write the puzzle and (optionally) its undo history in one transaction. */
+/**
+ * Write the puzzle and (optionally) its undo history in one transaction, and queue it in
+ * the outbox for the next Drive backup (one row per puzzle).
+ */
 export async function savePuzzle(p: Puzzle, history?: History): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(['puzzles', 'history'], 'readwrite');
+  const tx = db.transaction(['puzzles', 'history', 'outbox'], 'readwrite');
+  const outbox = tx.objectStore('outbox');
+  const queued = await outbox.index('puzzleId').getAllKeys(p.id);
   await Promise.all([
     tx.objectStore('puzzles').put(p),
     history ? tx.objectStore('history').put(history) : Promise.resolve(),
+    ...queued.map((k) => outbox.delete(k)),
+    outbox.add({ puzzleId: p.id, at: Date.now() }),
     tx.done,
   ]);
 }
