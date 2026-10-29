@@ -6,7 +6,7 @@ import type { Day, Puzzle } from '../model/types';
 import { boardOf, crosserAt, letterOf, makeProblem, scopeMask, slotWord, type Board, type Problem } from './board';
 import { Segmenter, type DupeOptions } from './dupes';
 import type { Lexicon } from './lexicon';
-import type { AutofillScope, FillStats } from './protocol';
+import type { AutofillScope, FillEntry, FillStats } from './protocol';
 import { rng, Search, type Solution } from './search';
 import { floorFor } from './settings';
 
@@ -47,6 +47,7 @@ export function fillStats(prob: Problem, cells: Uint8Array, lex: Lexicon, day: D
   let total = 0;
   let len = 0;
   let weakest: FillStats['weakest'] = null;
+  const entries: FillEntry[] = [];
   for (const k of prob.vars) {
     const s = slots[k];
     const w = slotWord(cells, s);
@@ -56,6 +57,14 @@ export function fillStats(prob: Problem, cells: Uint8Array, lex: Lexicon, day: D
     const value = id >= 0 ? li!.values(day)[id] : 0;
     total += w.length * value;
     len += w.length;
+    entries.push({
+      slot: s.id,
+      word: w,
+      value: Math.round(value * 10) / 10,
+      nyt: id >= 0 ? li!.nyt[id] : 0,
+      last: id >= 0 ? li!.last[id] : 0,
+      under: id < 0 || li!.base[id] < floorFor(floor, w.length),
+    });
     if (!weakest || value < weakest.value) weakest = { slot: s.id, word: w, value: Math.round(value * 10) / 10 };
   }
   let underFloor = 0;
@@ -65,7 +74,7 @@ export function fillStats(prob: Problem, cells: Uint8Array, lex: Lexicon, day: D
     const info = lex.info(w);
     if (!info || info.base < floorFor(floor, w.length)) underFloor++;
   }
-  return { stats: { average: len ? Math.round((total / len) * 10) / 10 : 0, weakest, underFloor }, total };
+  return { stats: { average: len ? Math.round((total / len) * 10) / 10 : 0, weakest, underFloor, entries }, total };
 }
 
 function toFill(prob: Problem, cells: Uint8Array): Record<number, string> {

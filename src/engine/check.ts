@@ -154,6 +154,8 @@ export function checkPuzzle(p: Pick<Puzzle, 'width' | 'height' | 'cells'>, lex: 
   }
 
   // entry quality
+  const debuts: typeof entries = [];
+  const old: (typeof entries[number] & { last: number })[] = [];
   for (const e of entries) {
     const info = lex.info(e.word);
     if (!info) {
@@ -164,10 +166,24 @@ export function checkPuzzle(p: Pick<Puzzle, 'width' | 'height' | 'cells'>, lex: 
     else if (info.base < floorFor(o.floor, e.word.length)) {
       issues.push({ level: 'warning', kind: 'floor', slots: [e.id], text: `${e.id} ${e.word} scores ${Math.round(info.base)}, under the floor` });
     }
-    if (info.nyt === 0) issues.push({ level: 'info', kind: 'debut', slots: [e.id], text: `${e.id} ${e.word} would be a debut` });
-    else if (info.last > 0 && info.last < OLD_YEAR) {
-      issues.push({ level: 'info', kind: 'old', slots: [e.id], text: `${e.id} ${e.word} last used in ${info.last}` });
-    }
+    if (info.nyt === 0) debuts.push(e);
+    else if (info.last > 0 && info.last < OLD_YEAR) old.push({ ...e, last: info.last });
+  }
+  if (debuts.length) {
+    issues.push({
+      level: 'info',
+      kind: 'debut',
+      slots: debuts.map((e) => e.id),
+      text: `${debuts.length} debut${debuts.length === 1 ? '' : 's'} (not in the NYT): ${debuts.map((e) => e.word).join(', ')}`,
+    });
+  }
+  if (old.length) {
+    issues.push({
+      level: 'info',
+      kind: 'old',
+      slots: old.map((e) => e.id),
+      text: `${old.length} only used before ${OLD_YEAR}: ${old.map((e) => `${e.word} (${e.last})`).join(', ')}`,
+    });
   }
 
   // grid
