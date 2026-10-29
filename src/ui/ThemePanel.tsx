@@ -6,7 +6,7 @@ import { slotLabel } from '../model/grid';
 import { letterBreakdown, letters, symmetryCheck, themeAnswers, type NotebookTheme, type ThemeEntry } from '../model/notebook';
 import { findPlaced, placeThemeEntry, unlockSlot } from '../model/theme';
 import type { EditorSession } from '../state/editor';
-import { SymmetryPill } from './Notebook';
+import { SymmetryPill } from './ThemePicker';
 
 export function ThemePanel({ s }: { s: EditorSession }) {
   const p = s.puzzle.value;

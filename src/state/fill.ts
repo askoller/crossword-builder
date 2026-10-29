@@ -2,6 +2,7 @@
 // select mode, autofill runs (in place and on the Autofill screen) and Check.
 import { computed, effect, signal, type Signal } from '@preact/signals';
 import { getSetting, setSetting } from '../data/db';
+import { notebookVersion } from '../data/notebook';
 import type { CandidateList } from '../engine/candidates';
 import type { CheckReport } from '../engine/check';
 import { engineGrid, getCandidates, NoDataError, reloadEngine, runCheck, startAutofill, type AutofillRun } from '../engine/client';
@@ -32,8 +33,11 @@ const lexConfig = computed(() => ({ neverUse: fillSettings.value.neverUse }));
 
 if (typeof window !== 'undefined') {
   let first = true;
+  // A data import or a Notebook change (boosts, answers added or removed, also from a
+  // Drive sync) rebuilds the engine's word list.
   effect(() => {
     void dataVersion.value;
+    void notebookVersion.value;
     if (!first) reloadEngine();
     first = false;
   });
@@ -148,6 +152,7 @@ export class FillController {
         const p = this.s.puzzle.value;
         const f = this.filters.value;
         void fillSettings.value;
+        void notebookVersion.value;
         if (ct) clearTimeout(ct);
         if (!slot) {
           this.list.value = null;
@@ -171,6 +176,7 @@ export class FillController {
       effect(() => {
         const p = this.s.puzzle.value;
         void fillSettings.value;
+        void notebookVersion.value;
         if (kt) clearTimeout(kt);
         kt = setTimeout(() => void this.loadCheck(p), CHECK_DEBOUNCE);
       }),

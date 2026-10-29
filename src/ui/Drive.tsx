@@ -70,6 +70,35 @@ export function BackupCard() {
   );
 }
 
+/** Notebook screen status line: "Synced with ThemeFill · 2 min ago" and friends (SPEC §3.7). */
+export function NotebookSyncLine({ synced = 0 }: { synced?: number }) {
+  useTick();
+  const nb = notebookSyncStatus.value;
+  const at = Math.max(nb.at, synced);
+  let text: string;
+  let tap: (() => void) | null = () => void syncNotebook();
+  if (authState.value === 'disconnected') {
+    text = 'On this phone · Connect Google Drive to sync with ThemeFill';
+    tap = () => navigate({ name: 'settings' });
+  } else if (authState.value === 'paused') {
+    text = 'Sync paused · tap to resume';
+    tap = () => void resume().catch(() => navigate({ name: 'settings' }));
+  } else if (backupStatus.value.needsFolder) {
+    text = 'Choose a Drive folder in Settings to sync with ThemeFill';
+    tap = () => navigate({ name: 'settings' });
+  } else if (nb.busy) {
+    text = 'Syncing with ThemeFill…';
+    tap = null;
+  } else if (nb.error) text = `Sync failed · ${nb.error} · tap to retry`;
+  else if (!navigator.onLine) text = 'Offline · edits sync with ThemeFill when back online';
+  else text = at ? `Synced with ThemeFill · ${relativeTime(at)}` : 'Not synced yet · tap to sync';
+  return (
+    <button class={`sync-line${nb.error ? ' warn-text' : ' muted'}`} disabled={!tap} onClick={() => tap?.()}>
+      {text}
+    </button>
+  );
+}
+
 /** Shown at the top of every screen while backup is paused. */
 export function PausedBanner() {
   const [error, setError] = useState('');

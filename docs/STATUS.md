@@ -126,16 +126,6 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
   `tests/e2e/fill.spec.ts`: Fill use + undo, select-drag + Autofill these + Keep + undo,
   Autofill screen on the mini grid + Check, at all three sizes.
 
-## Next
-- Sessions 2, 3 and 4 (see `docs/SESSIONS.md`), in parallel.
-- Session 2 is done (see above). Session 5 merge notes: `src/ui/Editor.tsx` now renders
-  `FillPanel`, `AutofillPanel`, `CheckPanel` and `SelectBanner`; the Clue panel and the
-  Clues / Theme tabs are still placeholders for session 3 (`CLUE_PLACEHOLDER`,
-  `SidePanel`). "Clue history" / "Full clue history" set `s.panel.value = 'clue'`.
-  `PanelName` still contains `'select'` but select mode is `s.fill.selectMode`.
-- Session 3: import already exists and works from local files; move on to clues and the
-  Notebook. Clue text can be written with `EditorSession.commit(new Map(), cluesMap)`
-  (undoable). The Clues tab in the bottom nav and the Notebook are placeholders.
 ### Session 3: data import, clues, notebook
 - **Import** (already built in session 1) is unchanged apart from more tests: gzip/plain
   detection, a pack without a manifest, keeping existing clues when a file is missing.
@@ -265,40 +255,66 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
 9. Leave the app idle for over an hour, then edit: either it renews silently or the
    "Backup paused · tap to resume" banner appears; tapping it resumes and uploads.
 
+### Session 5: merge and integration
+- **Merged** PRs askoller/crossword-builder#3 (session 2), #1 (session 3) and #2 (session 4)
+  into `main` in that order with merge commits. Conflicts: `styles.css` (each branch
+  appended a block at the same spot; all kept, in merge order), `src/ui/Editor.tsx`
+  (Fill / Autofill / Check panels from session 2 plus the Clue editor and Theme panel from
+  session 3; the inner-screen tabs are Fill → `FillPanel`, Clues → `ClueEditor`,
+  Theme → `ThemePanel`; overflow has both "Theme entries" and the working Export .puz),
+  `src/state/editor.ts` (`FillController` and the Drive flush hook), `src/ui/Settings.tsx`
+  (Fill settings and the Drive section). `src/model/notebook.ts`, `src/data/notebook.ts` and
+  `tests/unit/notebook.test.ts` were byte-identical in #1 and #2; one copy kept.
+- **New puzzle → Notebook theme**: the New puzzle dialog now reads themes through
+  `readNotebook()` and shows them as Notebook theme cards (`src/ui/ThemePicker.tsx`: title,
+  entries with lengths, revealer, the symmetry pill computed for the chosen grid width,
+  a warning when an entry is longer than the width), with "No theme" first. The theme
+  the dialog was opened for (Notebook → Start a puzzle) is preselected and listed first.
+  Creating a puzzle from a theme opens the editor on Theme entries (sheet on the cover
+  screen, Theme tab on the inner screen) via `openPanelOnLoad` / `takePanelOnLoad` in
+  `src/state/editor.ts`. `SymmetryPill` moved to `ThemePicker.tsx`.
+- **Fill ↔ Notebook boosts**: `notebookVersion` changes reload the engine's word list
+  (`reloadEngine()`, `src/state/fill.ts`) and refresh the open Fill list and Check, so a
+  boost edited in the Notebook, a "Save to Notebook" from the clue editor, or a change
+  pulled from ThemeFill shows up in Fill and Autofill straight away. Boosted answers
+  missing from the list are added by the engine (session 2). Fill rows show the boost as
+  a small version of the Notebook's boost pill (`.fill-word .boost`).
+- **Notebook edits → Drive**: `src/data/notebook.ts` has a second signal, `notebookEdits`,
+  bumped only by edits made in the app (`saveAnswer`, `saveTheme`, `deleteItem`,
+  `addClueIdea`), not by sync merges. `src/sync/index.ts` pushes 1.5 s after an edit
+  (`NOTEBOOK_PUSH_DELAY_MS`). `syncNotebook()` called during a running sync queues one
+  more round, so a mid-sync edit still reaches Drive. `mergeIntoLocal()` now reads, merges
+  and writes in **one IndexedDB transaction** (an edit saved while a download is in flight
+  can no longer be overwritten by the merge result) and only bumps `notebookVersion` when
+  the content actually changed (a no-op sync doesn't reload the engine). The Notebook's
+  status line (`NotebookSyncLine` in `src/ui/Drive.tsx`) reads "Synced with ThemeFill ·
+  2 min ago" / "Syncing…" / "Sync failed · … · tap to retry" / "Offline · …" /
+  "Sync paused · tap to resume" / "On this phone · Connect Google Drive to sync with
+  ThemeFill"; tapping it syncs now (or goes to Settings / resumes sign-in).
+- **Tests**: 134 unit tests (17 files): +2 for the queued sync round and edit vs. merge
+  counting. Playwright: 8 tests × 3 sizes = 24, all passing (ran the full suite 3× in a
+  row). New `tests/e2e/integration.spec.ts`: load fixtures, connect mocked Drive, add a
+  boosted Notebook answer not in the list (QXJZ, boost 100) → it appears in Drive's
+  `notebook.json` and tops the Fill list with "+100"; New puzzle → pick the fixture theme
+  card → the editor opens on its theme entries. The Google mock moved to
+  `tests/e2e/mockGoogle.ts` (shared with `drive.spec.ts`). Screenshots
+  `*-notebook-synced.png`, `*-fill-boost.png`, `*-new-puzzle-theme.png`,
+  `*-new-puzzle-theme-editor.png` in `test-results/screens/`.
+- **Screens checked against SPEC §3** at 476×752 and 1164×878: home, editor, Fill sheet /
+  Fill tab with the full table, select mode, Autofill, Check, clue editor, Clues browser,
+  Notebook answers / themes / edit, New puzzle with theme cards, Theme entries,
+  Settings → Drive. No layout regressions from the merge.
+
 ## Next
-- Sessions 2, 3 and 4 (see `docs/SESSIONS.md`), in parallel.
-- Session 2: the engine reads the lexicon with `openDb().get('lexicon', len)` (packed
-  chunks above; `lexiconWord(chunk, i)` in `importCore.ts`). Wire Fill / Autofill / Check /
-  Select into `PanelName` in `src/state/editor.ts` and replace the placeholders. Use
-  `EditorSession.commit(changes)` for Keep (one undoable step) after
-  `EditorSession.snapshot('autofill')`. Fill settings (floors, affixes, never-use) are not
-  in Settings yet.
-- Session 2: boosts for Fill/Autofill come from `notebookBoosts()` (letters → 1–100,
-  ×0.3 = `BOOST_FACTOR`); boosted answers missing from the word list should be added.
-  The Fill sheet's **Clue history** button can open the clue editor with
-  `s.panel.value = 'clue'`. `PanelName` now also has `'theme'`.
-- Session 4: Notebook sync = download Drive `notebook.json` → `mergeIntoLocal(remote)` →
-  upload the returned file (it's already merged and tombstoned). Replace the "On this
-  phone · syncs with ThemeFill once Google Drive is connected" line in `Notebook.tsx`.
-- Session 4: call `importDataPack(files)` from the Picker; the pack notebook for seeding
-  Drive is in `settings.datapackNotebook`. The `outbox` store exists but nothing writes to
-  it yet. Home backup card and Settings → Google Drive are static placeholders.
-  "Export .puz" in the editor overflow is disabled.
-- Session 3: import already exists and works from local files; move on to clues and the
-  Notebook. Clue text can be written with `EditorSession.commit(new Map(), cluesMap)`
-  (undoable). The Clues tab in the bottom nav and the Notebook are placeholders.
-- Session 4: done on its branch (see above).
-- Session 5 (merge): session 3 and session 4 both add `src/model/notebook.ts`,
-  `src/data/notebook.ts` and `tests/unit/notebook.test.ts` with identical content. Session 4
-  touches `src/data/puzzles.ts` (`savePuzzle` queues the outbox), `src/state/editor.ts`
-  (flush hook), `src/ui/{App,Home,Settings,Editor}.tsx`, `src/main.tsx` and appends CSS
-  at the end of `styles.css`. When the real Notebook screen lands on `#/notebook`, the
-  2-minute sync already runs there; it should also re-read on `notebookVersion` (it does,
-  since `writeNotebook` bumps it).
+- Andrew tests on the Fold 8 (cover and inner screen) and on a real Google account (manual
+  steps above), then a polish session for the issues he finds (`docs/SESSIONS.md`,
+  session 5 template's "issues Andrew found" list).
+- Check the engine's speed on the real data pack on the device.
 
 ## Known issues
 - Screen sizes for the Fold 8 are estimates; check on the device. The fixed-height panel
-  sheet on the cover screen (222 px) is sized to replace tool row + keyboard.
+  sheet on the cover screen (222 px) is sized to replace tool row + keyboard; Fill,
+  Autofill and Check use a taller sheet (54%).
 - Selecting squares whose slots also run through empty squares outside the selection
   leaves those squares empty: such slots are only checked for room (SPEC §4.4). Select
   whole entries (or use Select region) to fill them.
@@ -307,20 +323,23 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
 - Autofill's stop-within-100 ms is by design (30 ms slices) but has no automated test
   (vitest runs without workers).
 - No check yet that the engine is fast enough on the real 195k-word pack on the Fold 8;
-  fixture runs (270k synthetic words) are fast on the CI machine.
+  fixture runs (270k synthetic words) are fast on the CI machine. Every Notebook change
+  rebuilds the engine's index on the next Fill request; fine on fixtures, unmeasured on
+  the device.
 - Rebus entry uses a mode: long-press Block → Rebus (or Rebus on the inner screen), type
   letters, tap the clue bar or press Enter to finish.
-- Starting a puzzle from a theme creates an empty grid; Andrew places each entry from the
-  Theme tab/sheet after drawing blocks. Notebook edits are local only until session 4.
+- Starting a puzzle from a theme creates an empty grid that opens on Theme entries;
+  Andrew places each entry after drawing blocks (no automatic placement).
 - The fixture clue history is uniform ("History fixture clue N"), so the angle split bar
   shows only with real data or varied clues (unit-tested with hand-made clues).
-- Symmetry check on Notebook theme cards assumes a 15-wide grid; inside a puzzle it uses
-  the puzzle's width.
-- No Notebook UI yet, so "Start from a Notebook theme" only sets `themeId` and the title.
+- Symmetry check on Notebook theme cards assumes a 15-wide grid; in New puzzle it uses the
+  chosen width, inside a puzzle the puzzle's width.
 - Drive: the real Google flow (consent, Picker, folder pick granting access under
-  `drive.file`) is only tested with mocks here; follow the manual steps above.
+  `drive.file`) is only tested with mocks; follow the manual steps above.
 - Drive: if the laptop and the app write `notebook.json` within the same second, the last
   write wins for that round; the next sync merges again, but an edit could be lost in
   that window. Deleting a puzzle on the phone does not delete its Drive backup.
+- Two `.score-badge` rule sets exist in `styles.css` (Fill rows from session 2, clue editor
+  from session 3); the later one wins where they overlap. Looks right in both screens.
 - The production build has no fixtures (they're dev-only), so on the deployed site use
   Settings → Import data pack from files.

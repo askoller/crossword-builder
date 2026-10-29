@@ -156,7 +156,7 @@ export function FillPanel({ s, wide = false, onClose }: { s: EditorSession; wide
           >
             <span class="mono fill-word">
               {c.word}
-              {c.boost > 0 && <span class="boost">+{c.boost}</span>}
+              {c.boost > 0 && <span class="boost" title="Notebook boost" aria-label={`Notebook boost ${c.boost}`}>+{c.boost}</span>}
             </span>
             <ScoreBadge score={c.score} boost={c.boost} />
             <span class="small">{wide ? (c.nyt ? c.nyt : 'debut') : nytText(c)}</span>

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'preact/hooks';
-import { openDb } from '../data/db';
+import { readNotebook } from '../data/notebook';
 import { listPuzzles, savePuzzle } from '../data/puzzles';
 import { newPuzzle } from '../model/grid';
+import type { NotebookTheme } from '../model/notebook';
 import { DAYS, type Day, type Puzzle, type Status } from '../model/types';
 import { dataVersion, navigate } from '../state/app';
+import { openPanelOnLoad } from '../state/editor';
 import { Chips, Dialog, relativeTime } from './common';
 import { Thumb } from './Grid';
 import { BackupCard } from './Drive';
 import { IconClose, IconPlus, IconSearch } from './icons';
+import { ThemePicker } from './ThemePicker';
 
 type Filter = 'All' | 'In progress' | 'Submitted';
 
@@ -98,11 +101,6 @@ export function Home() {
   );
 }
 
-interface ThemeItem {
-  id: string;
-  title: string;
-}
-
 type SizeChoice = '15×15' | '21×21' | 'Custom';
 
 export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClose: () => void; themeId?: string }) {
@@ -112,16 +110,15 @@ export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClo
   const [day, setDay] = useState<Day>('Tue');
   const [outlet, setOutlet] = useState('NYT');
   const [title, setTitle] = useState('');
-  const [themes, setThemes] = useState<ThemeItem[]>([]);
+  const [themes, setThemes] = useState<NotebookTheme[]>([]);
   const [themeId, setThemeId] = useState(initialTheme);
 
   useEffect(() => {
-    void (async () => {
-      const db = await openDb();
-      const keys = await db.getAllKeys('notebook', IDBKeyRange.bound('theme:', 'theme:￿'));
-      const items = await Promise.all(keys.map((k) => db.get('notebook', k)));
-      setThemes(items.filter((t): t is ThemeItem => !!t && typeof (t as ThemeItem).id === 'string'));
-    })();
+    void readNotebook().then((nb) => {
+      // The theme this dialog was opened for first, then the most recently edited.
+      const order = (t: NotebookTheme) => (t.id === initialTheme ? Infinity : (t.updated ?? 0));
+      setThemes(nb.themes.sort((a, b) => order(b) - order(a)));
+    });
   }, []);
 
   const pickSize = (v: SizeChoice) => {
@@ -143,6 +140,7 @@ export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClo
     const p = newPuzzle({ width: w, height: h, day, outlet: outlet.trim() || 'NYT', title: title || theme?.title, themeId: theme?.id ?? null });
     await savePuzzle(p);
     onClose();
+    if (theme) openPanelOnLoad(p.id, 'theme');
     navigate({ name: 'editor', id: p.id });
   };
 
@@ -182,14 +180,7 @@ export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClo
       {themes.length > 0 && (
         <>
           <label class="label">Start from a Notebook theme (optional)</label>
-          <select class="field" value={themeId} aria-label="Notebook theme" onChange={(e) => setThemeId((e.target as HTMLSelectElement).value)}>
-            <option value="">None</option>
-            {themes.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+          <ThemePicker themes={themes} value={themeId} onChange={setThemeId} width={w} />
         </>
       )}
     </Dialog>

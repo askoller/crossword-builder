@@ -11,6 +11,19 @@ import { registerFlush } from '../sync';
 
 export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | 'theme' | null;
 
+let panelOnLoad: { id: string; panel: PanelName } | null = null;
+
+/** Open `panel` the next time the editor opens puzzle `id` (a new puzzle from a Notebook theme opens Theme entries). */
+export function openPanelOnLoad(id: string, panel: PanelName): void {
+  panelOnLoad = { id, panel };
+}
+
+export function takePanelOnLoad(id: string): PanelName {
+  const p = panelOnLoad?.id === id ? panelOnLoad.panel : null;
+  panelOnLoad = null;
+  return p;
+}
+
 export class EditorSession {
   readonly puzzle: Signal<Puzzle>;
   readonly history: Signal<History>;

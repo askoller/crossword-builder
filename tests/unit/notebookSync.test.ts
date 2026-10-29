@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setSetting } from '../../src/data/db';
-import { deleteItem, readNotebook, saveAnswer } from '../../src/data/notebook';
+import { deleteItem, notebookEdits, notebookVersion, readNotebook, saveAnswer } from '../../src/data/notebook';
 import { authState } from '../../src/google/auth';
 import type { NotebookFile } from '../../src/model/notebook';
 import { createRootFolder, getIds, setDrive } from '../../src/sync/backup';
@@ -98,5 +98,36 @@ describe('notebook sync (SPEC §5.4)', () => {
     await syncNotebook();
     expect(notebookSyncStatus.value.error).not.toBe('');
     expect((await readNotebook()).clues.map((c) => c.answer)).toEqual(['ERA']);
+  });
+
+  it('pushes an edit made while a sync is running (queued second round)', async () => {
+    fake.add({ name: 'notebook.json', parents: [root] }, JSON.stringify(pack));
+    const first = syncNotebook();
+    // Saved mid-sync: the merge must not overwrite it, and a second round must push it.
+    await saveAnswer(ans('ERA', 0), undefined, 400);
+    const second = syncNotebook();
+    await Promise.all([first, second]);
+    expect((await readNotebook()).clues.map((c) => c.answer).sort()).toEqual(['BAGEL', 'ERA']);
+    expect(remote().clues.map((c) => c.answer).sort()).toEqual(['BAGEL', 'ERA']);
+  });
+
+  it('counts app edits separately from sync merges, and a no-op sync leaves the Notebook version alone', async () => {
+    fake.add({ name: 'notebook.json', parents: [root] }, JSON.stringify(pack));
+    await syncNotebook();
+    const edits = notebookEdits.value;
+    const version = notebookVersion.value;
+    await syncNotebook();
+    expect(notebookVersion.value).toBe(version);
+    expect(notebookEdits.value).toBe(edits);
+    await saveAnswer(ans('ERA', 0), undefined, 400);
+    expect(notebookEdits.value).toBe(edits + 1);
+    await deleteItem('answer:ERA', 500);
+    expect(notebookEdits.value).toBe(edits + 2);
+    // A remote change bumps the version (engine reload) but is not an app edit.
+    remoteFile().content = new TextEncoder().encode(JSON.stringify({ ...pack, clues: [ans('BAGEL', 900, 90)] }));
+    const v2 = notebookVersion.value;
+    await syncNotebook();
+    expect(notebookVersion.value).toBe(v2 + 1);
+    expect(notebookEdits.value).toBe(edits + 2);
   });
 });

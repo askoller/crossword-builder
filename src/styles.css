@@ -991,13 +991,14 @@ p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.boost {
+/* Notebook boost on a Fill row: a small version of the Notebook's boost pill. */
+.fill-word .boost {
   font-family: var(--sans);
   font-size: 11px;
-  font-weight: 600;
-  color: var(--primary);
-  margin-left: 6px;
   letter-spacing: 0;
+  margin-left: 6px;
+  padding: 1px 6px;
+  vertical-align: 2px;
 }
 .dupe-note {
   grid-column: 1 / -1;
@@ -1565,7 +1566,15 @@ p {
   color: var(--muted);
 }
 .sync-line {
-  margin-top: 6px;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  font-size: 13px;
+  padding: 0;
+}
+.sync-line:disabled {
+  opacity: 1;
 }
 .nb-list {
   display: grid;
@@ -1781,4 +1790,36 @@ p {
 .restore-row > div {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* ---------- New puzzle: Notebook theme picker ---------- */
+.theme-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  text-align: left;
+  border: 1.5px solid var(--hairline);
+}
+.theme-option.on {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.theme-option-entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.theme-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
 }

@@ -6,7 +6,7 @@ import { authState } from '../google/auth';
 import { backupStatus } from '../sync/backup';
 import { DAYS, STATUSES, SYMMETRIES, type Day, type Puzzle, type Status, type Symmetry } from '../model/types';
 import { navigate, wide } from '../state/app';
-import { EditorSession, type PanelName } from '../state/editor';
+import { EditorSession, takePanelOnLoad, type PanelName } from '../state/editor';
 import { AutofillPanel, SelectBanner } from './AutofillPanel';
 import { CheckPanel } from './CheckPanel';
 import { ClueEditor } from './Clue';
@@ -46,7 +46,10 @@ export function EditorScreen({ id }: { id: string }) {
         return;
       }
       opened = s;
-      if (s) setSession(s);
+      if (s) {
+        s.panel.value = takePanelOnLoad(id);
+        setSession(s);
+      }
       else setMissing(true);
     });
     return () => {

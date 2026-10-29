@@ -33,12 +33,27 @@ function parse(text: string): Partial<NotebookFile> {
 }
 
 let running: Promise<void> | null = null;
+let queued: Promise<void> | null = null;
 
-/** Pull, merge and push. Does nothing offline or when Drive isn't connected. */
+/**
+ * Pull, merge and push. Does nothing offline or when Drive isn't connected. A call made
+ * while a sync runs queues one more round after it, so a Notebook edit made mid-sync
+ * still reaches Drive.
+ */
 export function syncNotebook(d?: Drive): Promise<void> {
-  running ??= doSync(d ?? getDrive()).finally(() => (running = null));
+  if (running) {
+    queued ??= running.then(() => {
+      queued = null;
+      return syncNotebook(d);
+    });
+    return queued;
+  }
+  running = doSync(d ?? getDrive()).finally(() => (running = null));
   return running;
 }
+
+/** Push app edits to Drive shortly after they're made (debounced). */
+export const NOTEBOOK_PUSH_DELAY_MS = 1500;
 
 async function doSync(d: Drive): Promise<void> {
   if (authState.value !== 'connected') return;

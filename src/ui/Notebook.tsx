@@ -16,21 +16,18 @@ import {
   type NotebookAnswer,
   type NotebookFile,
   type NotebookTheme,
-  type SymmetryCheck,
   type ThemeEntry,
 } from '../model/notebook';
 import type { Puzzle } from '../model/types';
 import { navigate } from '../state/app';
 import { Chips, Dialog } from './common';
+import { NotebookSyncLine } from './Drive';
 import { NewPuzzleDialog } from './Home';
 import { IconClose, IconPlus, IconSearch } from './icons';
+import { SymmetryPill } from './ThemePicker';
 
 type Tab = 'Answers' | 'Themes';
 type Sort = 'boost' | 'newest' | 'az';
-
-export function SymmetryPill({ check }: { check: SymmetryCheck }) {
-  return <span class={`sym-pill ${check.ok ? 'ok' : 'bad'}`}>{check.label}</span>;
-}
 
 export function NotebookScreen() {
   const [tab, setTab] = useState<Tab>('Answers');
@@ -96,7 +93,7 @@ export function NotebookScreen() {
         ))}
       </div>
       <div class="scroll">
-        <p class="muted small sync-line">On this phone · syncs with ThemeFill once Google Drive is connected</p>
+        <NotebookSyncLine synced={nb?.synced} />
         {tab === 'Answers' ? (
           <>
             <Chips

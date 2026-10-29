@@ -1,11 +1,13 @@
 // When Drive work happens: backups every 3 minutes and on going to the background,
-// Notebook sync on start, on returning to the foreground and every 2 minutes while the
-// Notebook is open (SPEC §5.3, §5.4). Nothing here blocks editing.
+// Notebook sync on start, on returning to the foreground, every 2 minutes while the
+// Notebook is open and shortly after each Notebook edit (SPEC §5.3, §5.4). Nothing here
+// blocks editing.
 import { effect } from '@preact/signals';
 import { authState, initAuth } from '../google/auth';
 import { route } from '../state/app';
 import { BACKUP_INTERVAL_MS, flushOutbox, loadBackupStatus } from './backup';
-import { NOTEBOOK_POLL_MS, syncNotebook } from './notebookSync';
+import { notebookEdits } from '../data/notebook';
+import { NOTEBOOK_POLL_MS, NOTEBOOK_PUSH_DELAY_MS, syncNotebook } from './notebookSync';
 
 const flushHooks = new Set<() => Promise<void>>();
 
@@ -45,6 +47,20 @@ export async function startSync(): Promise<void> {
   window.addEventListener('online', () => {
     void flushOutbox();
     void syncNotebook();
+  });
+
+  // Notebook edits (Notebook screen, Save to Notebook in the clue editor) go to Drive soon
+  // after they're made. Offline or paused, the next catch-up above pushes them.
+  let push: ReturnType<typeof setTimeout> | null = null;
+  let firstEdit = true;
+  effect(() => {
+    void notebookEdits.value;
+    if (firstEdit) {
+      firstEdit = false;
+      return;
+    }
+    if (push) clearTimeout(push);
+    push = setTimeout(() => void syncNotebook(), NOTEBOOK_PUSH_DELAY_MS);
   });
 
   let poll: ReturnType<typeof setInterval> | null = null;

@@ -135,8 +135,7 @@ test('notebook, clue browser, clue editor and theme panel', async ({ page }) => 
   await page.getByRole('button', { name: 'Start a puzzle' }).click();
   await page.getByRole('button', { name: 'Create' }).click();
   await expect(page.locator('.head-title .title')).toHaveText('Fixture theme');
-  await page.getByRole('button', { name: 'More' }).click();
-  await page.getByRole('menuitem', { name: /Theme entries/ }).click();
+  // A puzzle started from a theme opens on its Theme entries.
   await expect(page.getByText('SPOUSE', { exact: true })).toBeVisible();
   await shot(page, 'editor-theme');
 });
