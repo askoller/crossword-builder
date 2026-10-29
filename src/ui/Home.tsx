@@ -111,7 +111,7 @@ interface ThemeItem {
 
 type SizeChoice = '15×15' | '21×21' | 'Custom';
 
-function NewPuzzleDialog({ onClose }: { onClose: () => void }) {
+export function NewPuzzleDialog({ onClose, themeId: initialTheme = '' }: { onClose: () => void; themeId?: string }) {
   const [size, setSize] = useState<SizeChoice>('15×15');
   const [w, setW] = useState(15);
   const [h, setH] = useState(15);
@@ -119,7 +119,7 @@ function NewPuzzleDialog({ onClose }: { onClose: () => void }) {
   const [outlet, setOutlet] = useState('NYT');
   const [title, setTitle] = useState('');
   const [themes, setThemes] = useState<ThemeItem[]>([]);
-  const [themeId, setThemeId] = useState('');
+  const [themeId, setThemeId] = useState(initialTheme);
 
   useEffect(() => {
     void (async () => {

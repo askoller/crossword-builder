@@ -7,7 +7,7 @@ import * as ed from '../model/editor';
 import { applyDiff, makeDiff, pushDiff, redo as redoStep, undo as undoStep, type History } from '../model/history';
 import type { Cell, Clue, Puzzle, Slot } from '../model/types';
 
-export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | null;
+export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | 'theme' | null;
 
 export class EditorSession {
   readonly puzzle: Signal<Puzzle>;

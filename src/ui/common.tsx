@@ -124,3 +124,13 @@ export function relativeTime(iso: string | number, now = Date.now()): string {
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric' });
 }
+
+/** Score badge: solid primary ≥ 45, soft 40–44, grey below (SPEC §3.4). */
+export function ScoreBadge({ score }: { score: number }) {
+  const cls = score >= 45 ? 'hi' : score >= 40 ? 'mid' : 'lo';
+  return (
+    <span class={`score-badge ${cls}`} aria-label={`Score ${score}`}>
+      {score}
+    </span>
+  );
+}

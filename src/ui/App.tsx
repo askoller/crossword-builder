@@ -2,6 +2,8 @@ import { route, navigate, updateReady, type Route } from '../state/app';
 import { EditorScreen } from './Editor';
 import { Home } from './Home';
 import { IconClues, IconGrid, IconNotebook, IconSettings } from './icons';
+import { CluesScreen } from './Clues';
+import { NotebookScreen } from './Notebook';
 import { Settings } from './Settings';
 
 const NAV: { name: Exclude<Route['name'], 'editor'>; label: string; Icon: typeof IconGrid }[] = [
@@ -24,21 +26,6 @@ function BottomNav({ current }: { current: Route['name'] }) {
   );
 }
 
-function Placeholder({ title, text }: { title: string; text: string }) {
-  return (
-    <div class="screen">
-      <header class="topbar">
-        <h1>{title}</h1>
-      </header>
-      <div class="scroll">
-        <div class="empty">
-          <p class="muted">{text}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function App() {
   const r = route.value;
   if (r.name === 'editor') return <EditorScreen id={r.id} />;
@@ -54,8 +41,8 @@ export function App() {
       )}
       {r.name === 'home' && <Home />}
       {r.name === 'settings' && <Settings />}
-      {r.name === 'notebook' && <Placeholder title="Notebook" text="Answers, clue ideas and theme ideas, synced with ThemeFill. Coming in a later update." />}
-      {r.name === 'clues' && <Placeholder title="Clues" text="Look up any answer's NYT clue history. Coming in a later update." />}
+      {r.name === 'notebook' && <NotebookScreen />}
+      {r.name === 'clues' && <CluesScreen />}
       <BottomNav current={r.name} />
     </div>
   );

@@ -4,6 +4,7 @@ import { slotLabel, slotPattern } from '../model/grid';
 import { DAYS, STATUSES, SYMMETRIES, type Day, type Puzzle, type Status, type Symmetry } from '../model/types';
 import { navigate, wide } from '../state/app';
 import { EditorSession, type PanelName } from '../state/editor';
+import { ClueEditor } from './Clue';
 import { Chips, Dialog, Menu, relativeTime, Sheet, type MenuItem } from './common';
 import { Grid } from './Grid';
 import {
@@ -22,6 +23,7 @@ import {
   IconUndo,
 } from './icons';
 import { Keyboard } from './Keyboard';
+import { ThemePanel } from './ThemePanel';
 
 export function EditorScreen({ id }: { id: string }) {
   const [session, setSession] = useState<EditorSession | null>(null);
@@ -83,6 +85,7 @@ function Editor({ s }: { s: EditorSession }) {
         <>
           <Grid s={s} />
           <ClueBar s={s} />
+          {s.panel.value === 'clue' && <ClueEditor s={s} full onClose={() => (s.panel.value = null)} />}
           {s.panel.value ? (
             <PanelSheet s={s} />
           ) : (
@@ -123,6 +126,7 @@ function EditorHeader({ s }: { s: EditorSession }) {
   const items: MenuItem[] = [
     { label: 'Rename', onSelect: () => setDialog('rename') },
     { label: 'Puzzle settings', onSelect: () => setDialog('settings') },
+    { label: 'Theme entries', onSelect: () => (s.panel.value = 'theme') },
     { label: 'Export .puz', onSelect: () => {}, disabled: true, hint: 'Coming soon' },
     {
       label: 'Duplicate',
@@ -379,7 +383,7 @@ function ToolRow({ s, wide: isWide = false }: { s: EditorSession; wide?: boolean
   );
 }
 
-const PLACEHOLDERS: Record<Exclude<PanelName, null>, { title: string; text: string }> = {
+const PLACEHOLDERS: Record<Exclude<PanelName, null | 'clue' | 'theme'>, { title: string; text: string }> = {
   select: {
     title: 'Select squares',
     text: 'Select squares to autofill just that part of the grid. This arrives with the fill engine.',
@@ -387,12 +391,21 @@ const PLACEHOLDERS: Record<Exclude<PanelName, null>, { title: string; text: stri
   fill: { title: 'Fill suggestions', text: 'Ranked words for this slot arrive with the fill engine.' },
   autofill: { title: 'Autofill', text: 'Whole-grid and selection autofill arrive with the fill engine.' },
   check: { title: 'Check', text: 'Duplicate rules, crossing viability and grid stats arrive with the fill engine.' },
-  clue: { title: 'Clue', text: 'The clue editor with NYT clue history arrives with the clue data import.' },
 };
 
 function PanelSheet({ s }: { s: EditorSession }) {
   const name = s.panel.value;
   if (!name) return null;
+  const close = () => (s.panel.value = null);
+  // The clue editor is a full page on the cover screen; keep the tool row under it.
+  if (name === 'clue') return <ToolRow s={s} />;
+  if (name === 'theme') {
+    return (
+      <Sheet title="Theme entries" onClose={close}>
+        <ThemePanel s={s} />
+      </Sheet>
+    );
+  }
   const ph = PLACEHOLDERS[name];
   const slot = s.currentSlot.value;
   return (
@@ -408,7 +421,13 @@ function SidePanel({ s }: { s: EditorSession }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>('Fill');
   const name = s.panel.value;
   const slot = s.currentSlot.value;
-  if (name && name !== 'fill' && name !== 'clue') {
+  // Tools that open a tab on the cover screen pick that tab here.
+  useEffect(() => {
+    if (name === 'clue') setTab('Clues');
+    else if (name === 'theme') setTab('Theme');
+    else if (name === 'fill') setTab('Fill');
+  }, [name]);
+  if (name && name !== 'fill' && name !== 'clue' && name !== 'theme') {
     const ph = PLACEHOLDERS[name];
     return (
       <div class="side-panel">
@@ -418,12 +437,6 @@ function SidePanel({ s }: { s: EditorSession }) {
       </div>
     );
   }
-  const text =
-    tab === 'Fill'
-      ? 'The full suggestion table for the selected slot arrives with the fill engine.'
-      : tab === 'Clues'
-        ? 'Clue history for the selected entry arrives with the clue data import.'
-        : 'Theme entries from the Notebook arrive with the Notebook.';
   return (
     <div class="side-panel">
       <div class="tabs" role="tablist">
@@ -433,16 +446,26 @@ function SidePanel({ s }: { s: EditorSession }) {
           </button>
         ))}
       </div>
-      <div class="panel-body">
-        {slot && (
-          <div class="panel-slot">
-            <span class="cluebar-label">{slotLabel(slot)}</span>
-            <span class="mono pattern">{slotPattern(s.puzzle.value.cells, slot)}</span>
-            <span class="muted">{slot.cells.length} letters</span>
-          </div>
-        )}
-        <p class="placeholder">{text}</p>
-      </div>
+      {tab === 'Clues' ? (
+        <ClueEditor s={s} />
+      ) : (
+        <div class="panel-body">
+          {tab === 'Theme' ? (
+            <ThemePanel s={s} />
+          ) : (
+            <>
+              {slot && (
+                <div class="panel-slot">
+                  <span class="cluebar-label">{slotLabel(slot)}</span>
+                  <span class="mono pattern">{slotPattern(s.puzzle.value.cells, slot)}</span>
+                  <span class="muted">{slot.cells.length} letters</span>
+                </div>
+              )}
+              <p class="placeholder">The full suggestion table for the selected slot arrives with the fill engine.</p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -456,7 +479,7 @@ function isTyping(t: EventTarget | null): boolean {
 function usePhysicalKeyboard(s: EditorSession) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target) || document.querySelector('.overlay')) return;
+      if (isTyping(e.target) || document.querySelector('.overlay, [data-blocks-keys]')) return;
       const k = e.key;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && (k === 'z' || k === 'Z')) {
