@@ -9,6 +9,7 @@ export function Grid({ s }: { s: EditorSession }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState(0);
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
+  const drag = useRef<{ anchor: number; last: number; add: boolean; base: ReadonlySet<number>; moved: boolean } | null>(null);
 
   useEffect(() => {
     const el = wrap.current;
@@ -27,6 +28,10 @@ export function Grid({ s }: { s: EditorSession }) {
   const cur = s.cursor.value;
   const word = new Set(s.currentSlot.value?.cells ?? []);
   const rebus = s.rebusMode.value;
+  const f = s.fill;
+  const selMode = f.selectMode.value;
+  const sel = f.selection.value;
+  const preview = f.preview.value;
   const W = p.width * U;
   const H = p.height * U;
 
@@ -39,23 +44,61 @@ export function Grid({ s }: { s: EditorSession }) {
     return row * p.width + c;
   };
 
+  /** Rectangle of cells between two corners. */
+  const rect = (a: number, b: number): number[] => {
+    const [r0, r1] = [Math.floor(a / p.width), Math.floor(b / p.width)].sort((x, y) => x - y);
+    const [c0, c1] = [a % p.width, b % p.width].sort((x, y) => x - y);
+    const out: number[] = [];
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push(r * p.width + c);
+    return out;
+  };
+
   const onDown = (e: PointerEvent) => {
     const cell = cellFrom(e);
     if (cell === null) return;
     e.preventDefault();
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (f.selectMode.peek()) {
+      // tap toggles a square; dragging paints a rectangle (adding, or removing when the
+      // drag starts on a selected square)
+      const base = f.selection.peek();
+      drag.current = { anchor: cell, last: cell, add: !base.has(cell), base, moved: false };
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
     const state = {
       fired: false,
       timer: setTimeout(() => {
         state.fired = true;
-        // Long-press: enter select mode with that cell (select mode lands with the engine).
+        // Long-press: enter select mode with that cell selected.
         s.cursor.value = { cell, dir: s.cursor.value.dir };
-        s.panel.value = 'select';
+        f.enterSelect(cell);
       }, LONG_PRESS_MS),
     };
     press.current = state;
   };
+  const onMove = (e: PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const cell = cellFrom(e);
+    if (cell === null || cell === d.last) return;
+    d.last = cell;
+    d.moved = true;
+    const next = new Set(d.base);
+    for (const i of rect(d.anchor, cell)) {
+      if (d.add) next.add(i);
+      else next.delete(i);
+    }
+    f.setSelection(next);
+  };
   const onUp = (e: PointerEvent) => {
+    const d = drag.current;
+    if (d) {
+      drag.current = null;
+      if (!d.moved && f.selectable(d.anchor)) f.toggleCell(d.anchor);
+      s.cursor.value = { cell: d.anchor, dir: s.cursor.value.dir };
+      return;
+    }
     const st = press.current;
     press.current = null;
     if (!st) return;
@@ -68,6 +111,10 @@ export function Grid({ s }: { s: EditorSession }) {
     if (press.current) clearTimeout(press.current.timer);
     press.current = null;
   };
+  const onDragCancel = () => {
+    drag.current = null;
+    onCancel();
+  };
 
   const rects = [];
   const texts = [];
@@ -76,7 +123,11 @@ export function Grid({ s }: { s: EditorSession }) {
     const x = (i % p.width) * U;
     const y = Math.floor(i / p.width) * U;
     let fill = '#FFFFFF';
-    if (c.b) fill = i === cur.cell ? '#3A3F4B' : 'var(--ink)';
+    if (selMode) {
+      if (c.b) fill = 'var(--ink)';
+      else if (sel.has(i)) fill = 'var(--selection)';
+      else if (c.lock) fill = 'var(--locked)';
+    } else if (c.b) fill = i === cur.cell ? '#3A3F4B' : 'var(--ink)';
     else if (i === cur.cell) fill = 'var(--active)';
     else if (word.has(i)) fill = 'var(--word)';
     else if (c.lock) fill = 'var(--locked)';
@@ -93,10 +144,17 @@ export function Grid({ s }: { s: EditorSession }) {
         </text>,
       );
     }
-    const t = cellText(c);
+    const pv = preview?.letters.get(i);
+    const t = pv ?? cellText(c);
     if (t) {
       const fs = t.length > 1 ? Math.min(56, 150 / t.length) : 64;
-      const color = c.lock || c.src === 'theme' || c.src === 'autofill' ? 'var(--ink)' : 'var(--primary)';
+      const color = pv
+        ? preview!.kind === 'autofill'
+          ? 'var(--autofill)'
+          : 'var(--preview)'
+        : c.lock || c.src === 'theme' || c.src === 'autofill'
+          ? 'var(--ink)'
+          : 'var(--primary)';
       texts.push(
         <text key={`l${i}`} x={x + U / 2} y={y + 62 + fs * 0.36} class="cell-letter" font-size={fs} fill={color}>
           {t}
@@ -120,15 +178,16 @@ export function Grid({ s }: { s: EditorSession }) {
         width={size * p.width}
         height={size * p.height}
         onPointerDown={onDown}
+        onPointerMove={onMove}
         onPointerUp={onUp}
-        onPointerCancel={onCancel}
+        onPointerCancel={onDragCancel}
         onPointerLeave={onCancel}
         onContextMenu={(e) => e.preventDefault()}
       >
         {rects}
         <path d={lines.join('')} class="grid-lines" />
         {texts}
-        {rebus && <rect x={cx + 4} y={cy + 4} width={U - 8} height={U - 8} class="rebus-ring" />}
+        {rebus && !selMode && <rect x={cx + 4} y={cy + 4} width={U - 8} height={U - 8} class="rebus-ring" />}
         <rect x={0} y={0} width={W} height={H} class="grid-border" />
       </svg>
     </div>
