@@ -6,9 +6,9 @@ playwright-report/
 !.env.example
 
 # Personal data must never be committed (see CLAUDE.md, rule 1)
-data/
-datapack/
-private/
+/data/
+/datapack/
+/private/
 *.cluedatabase
 *.puz
 words.tsv*
