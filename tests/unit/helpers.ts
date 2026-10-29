@@ -34,3 +34,17 @@ export function rowsOf(p: Puzzle): string[] {
   }
   return out;
 }
+
+let fixtureLex: import('../../src/engine/lexicon').Lexicon | null = null;
+
+/** The fixture word list as an engine lexicon, with the fixture Notebook boosts (cached). */
+export async function fixtureLexicon(): Promise<import('../../src/engine/lexicon').Lexicon> {
+  if (fixtureLex) return fixtureLex;
+  const { gunzipSync } = await import('node:zlib');
+  const { parseWords } = await import('../../src/data/importCore');
+  const { Lexicon } = await import('../../src/engine/lexicon');
+  const tsv = gunzipSync(readFileSync(join(FIXTURES, 'words.tsv.gz'))).toString('utf8');
+  const nb = JSON.parse(readFileSync(join(FIXTURES, 'notebook.json'), 'utf8')) as { clues: { answer: string; boost: number }[] };
+  fixtureLex = new Lexicon(parseWords(tsv).values(), { notebook: nb.clues });
+  return fixtureLex;
+}
