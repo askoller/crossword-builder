@@ -2,12 +2,21 @@ import { useEffect, useState } from 'preact/hooks';
 import { resetWordCache } from '../data/clues';
 import { getSetting } from '../data/db';
 import { importDataPack, type ImportProgress, type StoredManifest } from '../data/import';
+import { classifyFiles, type DataPackFiles } from '../data/importCore';
 import { authState } from '../google/auth';
 import { backupStatus } from '../sync/backup';
 import { importFromDrive } from '../sync/driveImport';
 import { dataVersion, updateReady } from '../state/app';
 import { FillSettingsSection } from './FillSettings';
 import { DriveSection } from './Drive';
+
+const PACK_FILES: [keyof DataPackFiles, string][] = [
+  ['manifest', 'manifest.json'],
+  ['words', 'words.tsv.gz'],
+  ['clues', 'clues.json.gz'],
+  ['myScores', 'my-scores.json'],
+  ['notebook', 'notebook.json'],
+];
 
 function fmtYmd(n: number): string {
   const s = String(n);
@@ -19,19 +28,26 @@ export function Settings() {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [error, setError] = useState('');
+  const [done, setDone] = useState('');
+  const [note, setNote] = useState('');
+  /** local files picked so far, one role each (picking files one at a time adds to this) */
+  const [staged, setStaged] = useState<Partial<Record<keyof DataPackFiles, File>>>({});
 
   useEffect(() => {
     void getSetting<StoredManifest>('manifest').then((m) => setManifest(m ?? null));
     void navigator.storage?.persisted?.().then(setPersisted);
   }, [dataVersion.value]);
 
-  const run = async (job: () => Promise<unknown>) => {
+  const run = async (job: () => Promise<unknown>, what = 'Data pack') => {
     setError('');
+    setDone('');
     setProgress({ phase: 'words', fraction: 0, message: 'Starting' });
     try {
-      await job();
+      const result = await job();
+      if (result === null) return; // cancelled
       resetWordCache();
       dataVersion.value++;
+      setDone(`${what} imported.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -43,7 +59,22 @@ export function Settings() {
     const input = e.target as HTMLInputElement;
     const files = [...(input.files ?? [])];
     input.value = '';
-    if (files.length) void run(() => importDataPack(files, setProgress));
+    const roles = classifyFiles(files);
+    const next = { ...staged };
+    for (const [role, i] of Object.entries(roles) as [keyof DataPackFiles, number][]) if (i >= 0) next[role] = files[i];
+    const unknown = files.length - Object.values(roles).filter((i) => i >= 0).length;
+    setStaged(next);
+    setDone('');
+    setError('');
+    setNote(unknown ? `${unknown} file${unknown > 1 ? 's are' : ' is'} not part of a data pack (expected ${PACK_FILES.map((f) => f[1]).join(', ')}).` : '');
+  };
+
+  const stagedCount = Object.keys(staged).length;
+  const importStaged = () => {
+    const files = { ...staged };
+    setStaged({});
+    setNote('');
+    void run(() => importDataPack(files, setProgress), `${stagedCount} file${stagedCount > 1 ? 's' : ''}`);
   };
 
   const loadFixtures = () =>
@@ -107,10 +138,35 @@ export function Settings() {
                 </button>
               )}
               <label class={`btn file-btn${authState.value === 'connected' ? '' : ' primary'}`}>
-                {manifest ? 'Re-import data pack from files' : 'Import data pack from files'}
+                {stagedCount ? 'Add another file' : manifest ? 'Re-import from files on this phone' : 'Import from files on this phone'}
                 <input type="file" multiple accept=".gz,.json,application/gzip,application/json" onChange={onFiles} />
               </label>
-              <p class="muted small">Pick manifest.json, words.tsv.gz, clues.json.gz, my-scores.json and notebook.json from the Crossword Builder/data folder (multi-select).</p>
+              {stagedCount > 0 ? (
+                <>
+                  <ul class="pack-files" aria-label="Files to import">
+                    {PACK_FILES.map(([role, name]) => (
+                      <li key={role} class={staged[role] ? 'on' : ''}>
+                        <span class="mono">{name}</span>
+                        <span class="muted small">{staged[role] ? 'ready' : 'not picked · keeps what is stored'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div class="row">
+                    <button class="btn primary" onClick={importStaged}>
+                      Import {stagedCount} file{stagedCount > 1 ? 's' : ''}
+                    </button>
+                    <button class="btn" onClick={() => setStaged({})}>
+                      Clear
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p class="muted small">
+                  {authState.value === 'connected'
+                    ? 'Google Drive imports every file in Crossword Builder/data. From the phone, pick the files one at a time or several at once, then tap Import.'
+                    : 'Pick manifest.json, words.tsv.gz, clues.json.gz, my-scores.json and notebook.json one at a time or several at once, then tap Import. Files you leave out keep what is stored.'}
+                </p>
+              )}
               {import.meta.env.DEV && (
                 <button class="btn" onClick={loadFixtures}>
                   Load fixtures (dev)
@@ -118,7 +174,9 @@ export function Settings() {
               )}
             </div>
           )}
+          {note && <p class="warn-text">{note}</p>}
           {error && <p class="warn-text">Import failed: {error}</p>}
+          {done && !error && <p class="ok-text">{done}</p>}
         </section>
 
         <DriveSection />

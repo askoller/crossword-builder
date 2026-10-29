@@ -20,6 +20,8 @@ export interface DriveFolders {
 /** Remembered Drive ids, so uploads update files in place instead of searching. */
 export interface DriveIds {
   folders?: DriveFolders;
+  /** the data/ folder inside the root (data pack import) */
+  data?: string;
   notebook?: string;
   /** per puzzle id */
   files?: Record<string, { json?: string; puz?: string }>;

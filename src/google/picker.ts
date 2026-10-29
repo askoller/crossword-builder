@@ -87,13 +87,17 @@ export async function pickFiles(title: string, parent?: string): Promise<PickedD
   );
 }
 
-/** Pick one folder (to use an existing "Crossword Builder" folder). Null when cancelled. */
-export async function pickFolder(title: string, query?: string): Promise<PickedDoc | null> {
+/**
+ * Pick one folder (an existing "Crossword Builder" folder, or its data/ folder). `query`
+ * searches by name; `parent` opens inside a folder. Null when cancelled.
+ */
+export async function pickFolder(title: string, query?: string, parent?: string): Promise<PickedDoc | null> {
   const [ns, token] = await Promise.all([pickerNs(), getToken()]);
   const docs = await show(
     (ns, b) => {
       const view = new ns.DocsView(ns.ViewId.FOLDERS).setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(FOLDER_MIME).setMode(ns.DocsViewMode.LIST);
       if (query) view.setQuery(query);
+      if (parent) view.setParent(parent);
       return b.addView(view).setTitle(title);
     },
     token,

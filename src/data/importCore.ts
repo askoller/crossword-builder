@@ -111,7 +111,7 @@ export function notebookKey(item: { answer?: string; id?: string }, kind: 'answe
 export async function runImport(files: DataPackFiles, progress: (p: ImportProgress) => void = () => {}): Promise<StoredManifest | null> {
   const db = await openDb();
   let manifest: Manifest | null = null;
-  let patch: Partial<Manifest> | null = null;
+  const patch: Partial<Manifest> = {};
   const sizes: Record<string, number> = {};
   if (files.manifest) manifest = JSON.parse(await readText(files.manifest)) as Manifest;
 
@@ -129,7 +129,7 @@ export async function runImport(files: DataPackFiles, progress: (p: ImportProgre
       words += c.count;
       for (const s of c.score) if (s === 1) neverUse++;
     }
-    patch = { ...patch, words, neverUse };
+    Object.assign(patch, { words, neverUse });
     sizes['words.tsv.gz'] = files.words.size;
   }
   progress({ phase: 'clues', fraction: 0.3, message: 'Reading clue history' });
@@ -160,7 +160,7 @@ export async function runImport(files: DataPackFiles, progress: (p: ImportProgre
         message: `Saving clues ${Math.min(entries.length, i + CLUE_BATCH).toLocaleString('en-US')} of ${entries.length.toLocaleString('en-US')}`,
       });
     }
-    patch = { ...patch, clueAnswers: entries.length, clues, clueRange: [lo, hi] };
+    Object.assign(patch, { clueAnswers: entries.length, clues, clueRange: [lo, hi] });
     sizes['clues.json.gz'] = files.clues.size;
   }
 
@@ -182,8 +182,8 @@ export async function runImport(files: DataPackFiles, progress: (p: ImportProgre
     }
   }
 
-  if (!manifest && patch) {
-    const old = await db.get('settings', 'manifest') as StoredManifest | undefined;
+  if (!manifest && Object.keys(patch).length) {
+    const old = (await db.get('settings', 'manifest')) as StoredManifest | undefined;
     const base: Manifest = old
       ? (({ importedAt: _i, ...m }) => m)(old)
       : { format: 1, built: '', words: 0, neverUse: 0, handRatings: 0, themeFillBans: 0, clueAnswers: 0, clues: 0, clueRange: [0, 0], files: {} };
