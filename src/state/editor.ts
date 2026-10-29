@@ -8,7 +8,7 @@ import { applyDiff, makeDiff, pushDiff, redo as redoStep, undo as undoStep, type
 import type { Cell, Clue, Puzzle, Slot } from '../model/types';
 import { FillController } from './fill';
 
-export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | null;
+export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | 'theme' | null;
 
 export class EditorSession {
   readonly puzzle: Signal<Puzzle>;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { resetWordCache } from '../data/clues';
 import { getSetting } from '../data/db';
 import { importDataPack, type ImportProgress, type StoredManifest } from '../data/import';
 import { dataVersion, updateReady } from '../state/app';
@@ -26,6 +27,7 @@ export function Settings() {
     setProgress({ phase: 'words', fraction: 0, message: 'Starting' });
     try {
       await job();
+      resetWordCache();
       dataVersion.value++;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

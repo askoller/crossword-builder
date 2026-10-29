@@ -136,6 +136,65 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
 - Session 3: import already exists and works from local files; move on to clues and the
   Notebook. Clue text can be written with `EditorSession.commit(new Map(), cluesMap)`
   (undoable). The Clues tab in the bottom nav and the Notebook are placeholders.
+### Session 3: data import, clues, notebook
+- **Import** (already built in session 1) is unchanged apart from more tests: gzip/plain
+  detection, a pack without a manifest, keeping existing clues when a file is missing.
+  `importDataPack(files, onProgress)` in `src/data/import.ts` is the function session 4's
+  Picker calls with File/Blob objects. After an import, Settings calls `resetWordCache()`.
+- **Clue history** (`src/model/clues.ts`, pure): `nearDuplicates(draft, history)`
+  (content-word overlap |A∩B|/max(|A|,|B|) ≥ 0.6, or whole-word containment where the
+  contained side has ≥ 2 words), `clusterAngles` (most-shared content word per cluster,
+  at most 3 + "other", light plural folding), `filterHistory` (All / Since 2015 / Thu–Sat).
+  `src/data/clues.ts`: `getClueHistory(answer)` (one key read), `suggestAnswers(prefix)`,
+  `wordFacts(word)` (score / NYT count / last year from the packed lexicon, cached per length).
+- **Clue editor** (`src/ui/Clue.tsx`, §3.5): slot + answer header with score badge and NYT
+  count, prev/next entry, "Your clue" textarea with the near-duplicate warning (names the
+  clues with weekday and year), day target chips Mon–Sat (highlights same-weekday clues),
+  Notebook ideas (tap to insert), angle split bar (tap a segment or legend to filter),
+  filter pills, history list with near-matches highlighted, **Save to Notebook** and
+  **Save clue** (undoable via `EditorSession.commit`). Full page on the cover screen (Clue
+  tool), Clues tab on the inner screen.
+- **Clues tab** (`src/ui/Clues.tsx`): type an answer, prefix suggestions from the clue
+  store, then facts, Notebook ideas and the full history view.
+- **Notebook** (`src/ui/Notebook.tsx`, §3.7): Answers / Themes tabs with counts, search,
+  sort (boost / newest / A–Z), answer cards ("9 letters · 2 words (4, 5)", ideas, boost),
+  edit dialog (clue ideas add/remove, boost slider 1–100 showing the score effect, note,
+  delete), theme cards with the symmetry pill (`symmetryCheck`), Edit / Open puzzle /
+  **Start a puzzle** (the New puzzle dialog with the theme preselected).
+  Model in `src/model/notebook.ts`; local store in `src/data/notebook.ts`
+  (`readNotebook`, `saveAnswer` (rename tombstones the old key), `saveTheme`, `deleteItem`,
+  `addClueIdea`, `writeNotebook`, `mergeIntoLocal(remote)`, `notebookBoosts()`,
+  `notebookVersion` signal). Tombstones are stored in the `notebook` store under
+  `deleted:<key>`.
+- **Merge** (`mergeNotebooks(a, b)`, §5.4): per key newest `updated` wins (missing = 0),
+  a tombstone wins over edits not newer than it (ties go to the tombstone), superseded
+  tombstones are dropped, ties between equal times break deterministically, so the merge
+  is symmetric and idempotent (tested).
+- **Theme entries in the grid** (`src/model/theme.ts`, `src/ui/ThemePanel.tsx`): Theme tab
+  on the inner screen, "Theme entries" in the editor overflow on the cover screen. Lists
+  the linked theme's entries + revealer; "Place in 17-Across" when the current slot has
+  the right length (locked theme letters, one undoable step, refuses conflicting locked
+  crossings), shows where an entry is placed, Unlock, link / unlink a theme.
+- **Tests**: +27 unit tests (70 total) (clue matcher, angles, filters, notebook merge, symmetry
+  check, local notebook store, word facts, theme placement, import parsing). Playwright
+  adds a Notebook / Clues / clue editor / theme panel flow with screenshots at all three
+  sizes.
+
+## Next
+- Sessions 2, 3 and 4 (see `docs/SESSIONS.md`), in parallel.
+- Session 2: the engine reads the lexicon with `openDb().get('lexicon', len)` (packed
+  chunks above; `lexiconWord(chunk, i)` in `importCore.ts`). Wire Fill / Autofill / Check /
+  Select into `PanelName` in `src/state/editor.ts` and replace the placeholders. Use
+  `EditorSession.commit(changes)` for Keep (one undoable step) after
+  `EditorSession.snapshot('autofill')`. Fill settings (floors, affixes, never-use) are not
+  in Settings yet.
+- Session 2: boosts for Fill/Autofill come from `notebookBoosts()` (letters → 1–100,
+  ×0.3 = `BOOST_FACTOR`); boosted answers missing from the word list should be added.
+  The Fill sheet's **Clue history** button can open the clue editor with
+  `s.panel.value = 'clue'`. `PanelName` now also has `'theme'`.
+- Session 4: Notebook sync = download Drive `notebook.json` → `mergeIntoLocal(remote)` →
+  upload the returned file (it's already merged and tombstoned). Replace the "On this
+  phone · syncs with ThemeFill once Google Drive is connected" line in `Notebook.tsx`.
 - Session 4: call `importDataPack(files)` from the Picker; the pack notebook for seeding
   Drive is in `settings.datapackNotebook`. The `outbox` store exists but nothing writes to
   it yet. Home backup card and Settings → Google Drive are static placeholders.
@@ -155,6 +214,11 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
   fixture runs (270k synthetic words) are fast on the CI machine.
 - Rebus entry uses a mode: long-press Block → Rebus (or Rebus on the inner screen), type
   letters, tap the clue bar or press Enter to finish.
-- No Notebook UI yet, so "Start from a Notebook theme" only sets `themeId` and the title.
+- Starting a puzzle from a theme creates an empty grid; Andrew places each entry from the
+  Theme tab/sheet after drawing blocks. Notebook edits are local only until session 4.
+- The fixture clue history is uniform ("History fixture clue N"), so the angle split bar
+  shows only with real data or varied clues (unit-tested with hand-made clues).
+- Symmetry check on Notebook theme cards assumes a 15-wide grid; inside a puzzle it uses
+  the puzzle's width.
 - The production build has no fixtures (they're dev-only), so on the deployed site use
   Settings → Import data pack from files.
