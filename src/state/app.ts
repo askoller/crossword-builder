@@ -1,5 +1,6 @@
 // App-level state: route (hash based, so a reload reopens the same screen), layout mode.
-import { signal } from '@preact/signals';
+import { computed, signal } from '@preact/signals';
+import { chooseLayout, type Layout } from '../model/layout';
 
 export type Route =
   | { name: 'home' }
@@ -34,11 +35,16 @@ if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', () => (route.value = parseHash(location.hash)));
 }
 
-/** Inner screen (unfolded, landscape-ish) vs cover screen. Matches the CSS switch. */
-export const WIDE_QUERY = '(min-aspect-ratio: 1/1), (min-width: 900px)';
-const mq = typeof matchMedia !== 'undefined' ? matchMedia(WIDE_QUERY) : null;
-export const wide = signal(mq?.matches ?? false);
-mq?.addEventListener('change', (e) => (wide.value = e.matches));
+/**
+ * Layout for the current viewport (SPEC §3.10): cover portrait, inner landscape, inner
+ * portrait or the tall-phone fallback. Kept up to date by `installViewport()`
+ * (`src/state/viewport.ts`) on resize, rotation, fold / unfold and the Android keyboard.
+ */
+export const layout = signal<Layout>(typeof window !== 'undefined' ? chooseLayout(window.innerWidth, window.innerHeight) : 'cover');
+/** The Android keyboard is open (a text field has focus and the viewport shrank). */
+export const keyboardOpen = signal(false);
+/** Inner screen in landscape: grid + keyboard left, tools + panel right. */
+export const wide = computed(() => layout.value === 'inner-landscape');
 
 /** Bumped after a data import so screens reload what they show. */
 export const dataVersion = signal(0);

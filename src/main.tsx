@@ -11,7 +11,10 @@ import { getSetting, setSetting } from './data/db';
 import { updateReady } from './state/app';
 import { startSync } from './sync';
 import { App } from './ui/App';
+import { installViewport } from './state/viewport';
 
+// Layout and keyboard tracking before the first render, so the first layout is right.
+installViewport();
 render(<App />, document.getElementById('app')!);
 
 // Drive backup and Notebook sync; local editing never waits on it.
