@@ -361,6 +361,55 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
 3. New puzzle → Import → From phone files → a .puz from Across Lite or another app:
    check grid, letters, clues, circles and rebus; try Locked.
 
+### Session 7: Construct / Clue modes, inner-portrait layout
+Fixes for two problems Andrew found on the Fold 8.
+- **Layout chooser** (`src/model/layout.ts`, pure): `chooseLayout(w, h)` → `cover` /
+  `inner-landscape` / `inner-portrait` / `phone` (SPEC §3.10), and `ViewportTracker`,
+  which keeps the height from before the Android keyboard opened (so 880 × 1164 with the
+  keyboard up does not flip to landscape) and resets on a width change (rotation, fold /
+  unfold). `src/state/viewport.ts` (`installViewport()`, called in `main.tsx`) feeds it
+  from `visualViewport` on resize / rotation / focus, sets `--app-h`, `--vv-top`,
+  `--kb-h` and `html.kb-open`, updates the `layout` and `keyboardOpen` signals
+  (`src/state/app.ts`; `wide` is now `layout === 'inner-landscape'`, replacing the media
+  query), and scrolls the focused text field into view above the keyboard. `#app` and
+  `.overlay` / `.menu-overlay` are sized from those variables, so dialogs (rename,
+  Notebook edit, settings) stay above the keyboard; the bottom nav hides while it is open.
+- **Inner portrait** (`Editor.tsx`, `.editor-portrait`): full-width grid that shrinks so
+  clue bar, 7-tool row and keyboard (58 px keys) always fit; panels open as a bottom
+  sheet (`.portrait-sheet`, the tabbed `SidePanel` with a close button) in place of the
+  keyboard. The panel tab is now `EditorSession.sideTab`, so it survives rotation.
+- **Construct | Clue** switch in the editor header (`ModeSwitch`), remembered per puzzle in
+  `settings` (`editorMode:<id>`). `EditorSession` gained `mode`, `setMode`, `goToSlot`,
+  `clueText`, `setDraft` / `saveDraft` and `clueDraft` (persisted as `clueDraft:<id>`;
+  an effect saves the draft when the cursor moves to another entry).
+- **Clue mode** (`src/ui/ClueMode.tsx`): strip with answer letters and crossings, grid
+  (keyboard closed only, except inner landscape; `Grid tapOnly`), clue list with empty
+  rows highlighted and the current row kept in view, pinned composer (Prev / History /
+  Done / Next, Enter = Next). Buttons in the strip, list, composer and History panel keep
+  focus in the field (`useKeepFocus`), so the keyboard stays open. Physical keyboard in
+  Clue mode: letters never reach the grid; arrows / Tab / Space move; Enter focuses the field.
+- Construct mode's clue editor field is `inputmode="none"`; tapping it or **Write in Clue
+  mode** switches modes and focuses the composer.
+- **Tests**: 157 unit tests (+9 in `tests/unit/layout.test.ts`: the chooser at all four
+  device sizes and neighbours, keyboard / close grace / rotation in the tracker, mode
+  remembered per puzzle, draft across reload + one undo step, draft saved on moving).
+  Playwright gained the `portrait-880x1164` project (every spec now runs at 4 sizes, 56
+  tests passing) and `tests/e2e/modes.spec.ts`: layout per size with the keyboard and tool
+  row on screen, portrait bottom sheet surviving rotation, Clue mode (Enter saves and
+  moves, simulated keyboard = viewport height −45 % with the editor pinned to the bottom,
+  History keeps focus, Done, cell tap jumps to clue, mode kept across reload), rename
+  field above the keyboard. Screenshots `*-mode-construct.png`, `*-mode-clue.png`,
+  `*-mode-clue-keyboard.png`, `*-mode-clue-history.png`, `portrait-880x1164-portrait-sheet.png`.
+
+#### Manual test steps (session 7, on the Fold 8)
+1. Inner screen held upright: the app keyboard is visible under the grid; Fill opens a
+   sheet over the keyboard area; rotate / fold with Fill open: cursor and panel stay.
+2. Tap **Clue**: the clue list and pinned field appear. Tap the field: the Android
+   keyboard opens, the grid hides, the field sits right above the keyboard. Type, press
+   Enter: next clue, keyboard stays. History: keyboard stays. Done: keyboard closes, grid
+   returns. Reopen the puzzle: still in Clue mode.
+3. Notebook edit, Rename and Settings fields: the field stays visible above the keyboard.
+
 ## Next
 - `.ccw` import once `fixtures/ccw/` exists (see above).
 - Andrew tests on the Fold 8 (cover and inner screen) and on a real Google account (manual
@@ -369,6 +418,12 @@ Live app (GitHub Pages): https://askoller.github.io/crossword-builder/
 - Check the engine's speed on the real data pack on the device.
 
 ## Known issues
+- The keyboard is detected from the viewport shrinking while a text field has focus;
+  checked in Chrome's emulation only. If the Fold 8's browser pans instead of resizing,
+  `--vv-top` places the app in the visible area; check on the device. Whether tapping
+  History / Next keeps the Android keyboard open (no flicker) also needs the device.
+- The near-duplicate warning in the pinned editor shows only the first match (one line);
+  History lists them all.
 - Screen sizes for the Fold 8 are estimates; check on the device. The fixed-height panel
   sheet on the cover screen (222 px) is sized to replace tool row + keyboard; Fill,
   Autofill and Check use a taller sheet (54%).

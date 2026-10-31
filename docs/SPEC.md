@@ -66,7 +66,8 @@ Out of scope for v1: accounts, collaboration, a server, grid design from scratch
 
 ### 3.2 Grid editor (cover screen, 10:16)
 Top to bottom:
-1. Header: back, puzzle title, save status ("Saved · Drive 2 min ago"), **Undo** (a
+1. Header: back, puzzle title, save status ("Saved · Drive 2 min ago"), the
+   **Construct | Clue** mode switch (§3.11), **Undo** (a
    labeled pill, disabled style when nothing to undo), Redo (icon), overflow menu
    (Rename, Puzzle settings, Export .puz, Duplicate, Delete).
 2. Grid: square, full width minus 12 px margins.
@@ -174,6 +175,51 @@ current cell, or moves back and clears. Block toggles the cell and its 180° par
   exceptions (default: TION, SION, INGS, NESS, MENT, ABLE, IEST, IERS), never-use list
   editor (score-1 words plus app-level bans).
 - About / version / "Update available" banner from the service worker.
+
+### 3.10 Layouts (chosen from the real viewport)
+`chooseLayout(width, height)` in `src/model/layout.ts` (pure, unit-tested):
+- width ≥ height → **inner landscape** (§3.8).
+- portrait and width ≥ 600 px → **inner portrait** (the inner screen held upright, about
+  3:4, ~880 × 1164): header; grid at full width but sized so the clue bar, tool row
+  (Select, Fill, Autofill, Check, Clue, Block, Rebus) and the app's keyboard (taller keys)
+  always fit below it. Fill / Clues / Theme (and Autofill, Check) open as a bottom sheet
+  with the tabs in place of the keyboard; the tool row stays above it.
+- portrait, narrower, aspect (w/h) < 0.55 → **phone** fallback (412 × 915); same
+  single-column layout as the cover screen.
+- otherwise → **cover** (§3.2).
+The height used is the height *without* the Android keyboard (`ViewportTracker`: while a
+text field has focus, a shorter viewport of the same width means the keyboard is open; a
+width change means rotation or fold / unfold). It re-runs on resize, rotation, fold /
+unfold and keyboard changes; cursor, selection, open panel and panel tab live in the
+session, so they survive a layout change.
+
+`#app` and overlays are sized to `visualViewport` (`--app-h`, `--vv-top`; viewport meta
+has `interactive-widget=resizes-content`), so nothing is laid out under the keyboard.
+Every text field in the app (Notebook, rename, settings, …) is scrolled into view above
+the keyboard when it gets focus and when the keyboard resizes the page. The bottom nav
+hides while the keyboard is open.
+
+### 3.11 Construct and Clue modes
+Header switch **Construct | Clue**, remembered per puzzle (`settings` key
+`editorMode:<id>`, not part of the puzzle file).
+- **Construct**: §3.2 / §3.8 / §3.10 layouts. Nothing in the editing surface opens the
+  system keyboard: the clue editor's field has `inputmode="none"` (a physical keyboard
+  still types there); tapping it or **Write in Clue mode** switches to Clue mode with
+  the field focused.
+- **Clue**: built around the Android keyboard. From the top: compact header (no save
+  line); a one-line strip with the current answer's letters and its crossing entries
+  (tap one to go to it); with the keyboard closed, a smaller grid (tap a cell to jump to
+  its clue; no select mode); the clue list (Across, then Down; number, answer pattern,
+  clue or "No clue yet" with empty rows tinted amber), scrolled so the current clue
+  stays visible; and the clue editor pinned directly above the keyboard: near-duplicate
+  warning line, textarea, **Prev**, **History**, **Done**, **Next**. Next and Enter save
+  and move to the next clue with the keyboard kept open; Done saves and closes it.
+  History shows the NYT clue history and the near-duplicate warning in place of the
+  list without taking focus from the field. On the inner screen in landscape the grid
+  stays on the left and the strip, list and editor are on the right.
+- Typing is kept as a draft (`settings` key `clueDraft:<id>`, written within 300 ms,
+  survives a reload) and saved to the puzzle as one undoable step on Next / Prev /
+  Enter / Done, or when the cursor moves to another entry.
 
 ## 4. Engine (`src/engine/`, worker-only)
 
@@ -309,7 +355,9 @@ with a reader in tests.
 
 ## 9. Acceptance checks per area
 - Editor: type, delete, block with symmetry, switch direction, prev/next, undo/redo
-  across reload; Playwright screenshots at 476×752 and 1164×878 look like §3.
+  across reload; Playwright screenshots at 476×752, 1164×878, 880×1164 and 412×915 look
+  like §3, in Construct and Clue mode, and Clue mode with a simulated keyboard (viewport
+  height −45 %) keeps the clue editor directly above it.
 - Engine: unit tests for pattern match, crossing room, both dupe rules (cases above),
   selection autofill keeps outside letters unchanged and all touched slots valid.
 - Storage: kill the tab mid-edit and reopen; nothing lost.
