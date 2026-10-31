@@ -40,8 +40,14 @@ body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
+/* Sized to the visible viewport (src/state/viewport.ts), so nothing sits under the
+   Android keyboard. */
 #app {
-  height: 100dvh;
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--vv-top, 0px);
+  height: var(--app-h, 100dvh);
 }
 button {
   font: inherit;
@@ -472,7 +478,10 @@ p {
 .overlay,
 .menu-overlay {
   position: fixed;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: var(--vv-top, 0px);
+  height: var(--app-h, 100dvh);
   z-index: 20;
 }
 .overlay {
@@ -1875,4 +1884,322 @@ p {
 .notice-inline ul {
   margin: 4px 0 0;
   padding-left: 18px;
+}
+
+/* ---------- layouts and modes (SPEC §3.10, §3.11) ---------- */
+html.kb-open .bottomnav {
+  display: none;
+}
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.label-row .label {
+  margin: 0;
+}
+
+/* Construct | Clue */
+.mode-switch {
+  display: inline-flex;
+  flex: none;
+  margin: 0 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+}
+.seg {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  position: relative;
+}
+.seg::after {
+  /* 44 px touch target */
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
+.seg.on {
+  background: var(--ink);
+  color: #fff;
+}
+.editor-head.compact {
+  min-height: 48px;
+  padding-top: max(2px, env(safe-area-inset-top));
+  padding-bottom: 2px;
+}
+.editor-head.compact .sub {
+  display: none;
+}
+@media (max-width: 440px) {
+  .editor-head .pill-btn span {
+    display: none;
+  }
+  .editor-head .pill-btn {
+    padding: 0 10px;
+  }
+  .seg {
+    padding: 0 9px;
+  }
+}
+
+/* cover screen (and phone) tool row: 6 tools; inner portrait: 7 */
+.toolrow-portrait {
+  grid-template-columns: repeat(7, 1fr);
+}
+
+/* inner screen held in portrait: one column, bigger keys, panels as a bottom sheet */
+.editor-portrait .grid-wrap {
+  padding: 10px 16px;
+}
+.editor-portrait .cluebar {
+  margin: 0 16px;
+}
+.editor-portrait .toolrow {
+  padding: 10px 16px;
+}
+.editor-portrait .keyboard {
+  padding: 4px 12px max(10px, env(safe-area-inset-bottom));
+}
+.editor-portrait .key {
+  height: 58px;
+}
+.editor-portrait .key > span {
+  font-size: 21px;
+}
+.portrait-sheet {
+  height: min(46%, 560px);
+  margin-top: 0;
+}
+.portrait-sheet .side-panel {
+  margin: 0;
+  border: 0;
+  border-radius: 16px 16px 0 0;
+}
+.tabs-close {
+  margin-left: auto;
+}
+
+/* ---------- Clue mode ---------- */
+.clue-mode {
+  background: var(--surface);
+}
+.clue-mode-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.clue-mode-wide .clue-mode-grid {
+  flex: 0 0 auto;
+  width: min(48%, calc(var(--app-h, 100dvh) - 52px));
+  display: flex;
+  background: var(--bg);
+}
+.clue-mode-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--hairline);
+}
+.clue-mode-narrow .clue-mode-grid {
+  flex: 0 1 auto;
+  height: min(42%, 100vw);
+  min-height: 120px;
+  display: flex;
+  background: var(--bg);
+}
+.clue-mode-grid .grid-wrap {
+  padding: 6px 12px;
+  /* in a row flexbox the svg's width would otherwise widen the wrap (resize loop) */
+  min-width: 0;
+  overflow: hidden;
+}
+.cross-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 0 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: var(--word);
+  scrollbar-width: none;
+}
+.cs-label {
+  font-weight: 700;
+  font-size: 14px;
+  flex: none;
+}
+.cs-letters {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+  margin-right: 6px;
+}
+.cs-cell {
+  width: 24px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--grid-line);
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 15px;
+}
+.cs-cross {
+  flex: none;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+.cs-cross:active {
+  background: rgba(255, 255, 255, 0.6);
+}
+.cs-num {
+  font-weight: 700;
+  color: var(--muted);
+}
+.clue-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+  padding: 0 0 8px;
+  overscroll-behavior: contain;
+}
+.cl-summary {
+  padding: 8px 14px 0;
+}
+.cl-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+.cl-row {
+  display: grid;
+  grid-template-columns: 2.4em minmax(4.5em, auto) 1fr;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 10px 14px 10px 11px;
+  text-align: left;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--hairline);
+}
+.cl-num {
+  font-weight: 700;
+  text-align: right;
+}
+.cl-answer {
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  max-width: 11em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cl-clue {
+  min-width: 0;
+  line-height: 1.35;
+}
+.cl-row.empty {
+  background: var(--warning-bg);
+  border-left-color: var(--warning);
+}
+.cl-row.empty .cl-clue {
+  color: var(--warning-text);
+  font-style: italic;
+}
+.cl-row.on {
+  background: var(--word);
+  border-left-color: var(--primary);
+}
+.cl-row.on .cl-answer {
+  color: var(--ink);
+}
+.clue-composer {
+  flex: none;
+  padding: 8px 10px max(8px, env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+html.kb-open .clue-composer {
+  padding-bottom: 6px;
+}
+.compose-field {
+  min-height: 58px;
+  max-height: 96px;
+  padding: 8px 12px;
+  resize: none;
+  font-size: 16px;
+  line-height: 1.35;
+}
+.compose-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1.3fr;
+  gap: 6px;
+}
+.compose-btn {
+  padding: 0 8px;
+  gap: 4px;
+}
+.compose-btn.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.inline-warning.compact {
+  padding: 6px 10px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-sheet {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  box-shadow: 0 -6px 24px rgba(21, 23, 28, 0.1);
+  border-radius: 16px 16px 0 0;
+  margin-top: 6px;
+}
+.history-sheet .sheet-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.clue-mode.kb-open .cl-summary {
+  display: none;
 }

@@ -1,6 +1,7 @@
 // State for the open puzzle: grid, cursor, undo/redo and autosave.
-import { computed, signal, type ReadonlySignal, type Signal } from '@preact/signals';
+import { computed, effect, signal, type ReadonlySignal, type Signal } from '@preact/signals';
 import { Autosaver, type SaveState } from '../data/autosave';
+import { getSetting, setSetting } from '../data/db';
 import { addSnapshot, getHistory, getPuzzle, savePuzzle, SNAPSHOT_INTERVAL_MS } from '../data/puzzles';
 import { computeSlots, type SlotIndex } from '../model/grid';
 import * as ed from '../model/editor';
@@ -10,6 +11,19 @@ import { FillController } from './fill';
 import { registerFlush } from '../sync';
 
 export type PanelName = 'select' | 'fill' | 'autofill' | 'check' | 'clue' | 'theme' | null;
+/** Construct: grid entry with the app's keyboard. Clue: writing clues with the system keyboard. */
+export type EditorMode = 'construct' | 'clue';
+export type SideTab = 'Fill' | 'Clues' | 'Theme';
+/** An unsaved clue being typed in Clue mode (kept across reloads, saved on Next / Done). */
+export interface ClueDraft {
+  slot: string;
+  text: string;
+}
+
+/** Per-puzzle settings keys (the `settings` store; not part of the puzzle file). */
+export const modeKey = (id: string) => `editorMode:${id}`;
+export const draftKey = (id: string) => `clueDraft:${id}`;
+const DRAFT_SAVE_MS = 300;
 
 let panelOnLoad: { id: string; panel: PanelName } | null = null;
 
@@ -31,6 +45,14 @@ export class EditorSession {
   readonly saveState = signal<SaveState>('saved');
   readonly savedAt = signal<number>(Date.now());
   readonly panel = signal<PanelName>(null);
+  /** Construct | Clue, remembered per puzzle */
+  readonly mode = signal<EditorMode>('construct');
+  /** tab of the Fill / Clues / Theme panel (inner screen), kept across layout changes */
+  readonly sideTab = signal<SideTab>('Fill');
+  /** the clue being typed in Clue mode, not yet saved to the puzzle */
+  readonly clueDraft = signal<ClueDraft | null>(null);
+  /** focus the clue field (opening the keyboard) when Clue mode next renders */
+  focusClue = false;
   /** typing goes into the current cell's rebus while on */
   readonly rebusMode = signal(false);
   readonly slots: ReadonlySignal<SlotIndex>;
@@ -42,8 +64,10 @@ export class EditorSession {
   private readonly autosaver: Autosaver;
   private lastSnapshot = Date.now();
   private readonly unregisterFlush: () => void;
+  private readonly disposeDraftWatch: () => void;
+  private draftTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(p: Puzzle, h: History) {
+  constructor(p: Puzzle, h: History, init: { mode?: EditorMode; draft?: ClueDraft | null } = {}) {
     this.puzzle = signal(p);
     this.history = signal(h);
     this.cursor = signal(ed.initialCursor(p));
@@ -70,12 +94,85 @@ export class EditorSession {
     this.fill = new FillController(this);
     // Going to the background: write pending edits before the Drive upload runs.
     this.unregisterFlush = registerFlush(() => this.flush());
+    if (init.mode === 'clue') this.mode.value = 'clue';
+    const draft = init.draft;
+    if (draft && this.slots.value.slots.some((sl) => sl.id === draft.slot)) {
+      this.clueDraft.value = draft;
+      this.goToSlot(draft.slot);
+    }
+    // Moving to another entry (a tap in the grid, Prev / Next) saves the draft first.
+    this.disposeDraftWatch = effect(() => {
+      const d = this.clueDraft.value;
+      const slot = this.currentSlot.value;
+      if (d && slot?.id !== d.slot) queueMicrotask(() => this.saveDraft(d.slot));
+    });
   }
 
   static async open(id: string): Promise<EditorSession | null> {
     const p = await getPuzzle(id);
     if (!p) return null;
-    return new EditorSession(p, await getHistory(id));
+    const [h, mode, draft] = await Promise.all([
+      getHistory(id),
+      getSetting<EditorMode>(modeKey(id)).catch(() => undefined),
+      getSetting<ClueDraft | null>(draftKey(id)).catch(() => undefined),
+    ]);
+    return new EditorSession(p, h, { mode, draft });
+  }
+
+  /** Switch Construct / Clue; remembered for this puzzle. */
+  setMode(mode: EditorMode): void {
+    if (this.mode.value === mode) return;
+    this.rebusMode.value = false;
+    if (this.fill.selectMode.peek()) this.fill.exitSelect();
+    if (mode === 'clue') this.panel.value = null;
+    else this.saveDraft();
+    this.mode.value = mode;
+    void setSetting(modeKey(this.puzzle.value.id), mode).catch(() => undefined);
+  }
+
+  /** Put the cursor at the start of a slot (by id). */
+  goToSlot(id: string): void {
+    const slot = this.slots.value.slots.find((sl) => sl.id === id);
+    if (!slot) return;
+    this.rebusMode.value = false;
+    const here = this.currentSlot.value;
+    if (here?.id === id) return;
+    this.cursor.value = { cell: slot.cells[0], dir: slot.dir };
+  }
+
+  /** Text shown for a slot's clue: the draft while one is being typed, else the saved clue. */
+  clueText(id: string): string {
+    const d = this.clueDraft.value;
+    return d?.slot === id ? d.text : (this.puzzle.value.clues[id]?.text ?? '');
+  }
+
+  /** Typing in Clue mode: kept as a draft (persisted within 300 ms) until saved. */
+  setDraft(slot: string, text: string): void {
+    this.clueDraft.value = { slot, text };
+    if (this.draftTimer) clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => void this.writeDraft(), DRAFT_SAVE_MS);
+  }
+
+  private async writeDraft(): Promise<void> {
+    if (this.draftTimer) clearTimeout(this.draftTimer);
+    this.draftTimer = null;
+    await setSetting(draftKey(this.puzzle.value.id), this.clueDraft.peek()).catch(() => undefined);
+  }
+
+  /**
+   * Save the draft as the slot's clue (one undoable step; nothing when unchanged).
+   * `only` limits it to a draft for that slot.
+   */
+  saveDraft(only?: string): boolean {
+    const d = this.clueDraft.peek();
+    if (!d || (only && d.slot !== only)) return false;
+    this.clueDraft.value = null;
+    void this.writeDraft();
+    const text = d.text.trim();
+    const p = this.puzzle.value;
+    if (text === (p.clues[d.slot]?.text ?? '')) return false;
+    if (!this.slots.value.slots.some((sl) => sl.id === d.slot)) return false;
+    return this.commit(new Map(), new Map([[d.slot, text ? { ...p.clues[d.slot], text } : null]]));
   }
 
   private async save(): Promise<void> {
@@ -197,11 +294,14 @@ export class EditorSession {
     return addSnapshot(this.puzzle.value, reason);
   }
 
-  flush(): Promise<void> {
-    return this.autosaver.flush();
+  async flush(): Promise<void> {
+    if (this.draftTimer) await this.writeDraft();
+    await this.autosaver.flush();
   }
 
   async close(): Promise<void> {
+    this.disposeDraftWatch();
+    if (this.draftTimer) await this.writeDraft();
     this.fill.dispose();
     await this.autosaver.flush();
     this.autosaver.dispose();

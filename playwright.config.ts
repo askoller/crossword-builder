@@ -19,6 +19,7 @@ export default defineConfig({
   projects: [
     { name: 'cover-476x752', use: device(476, 752) },
     { name: 'inner-1164x878', use: device(1164, 878) },
+    { name: 'portrait-880x1164', use: device(880, 1164) },
     { name: 'phone-412x915', use: device(412, 915) },
   ],
   webServer: {

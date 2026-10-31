@@ -5,8 +5,9 @@ import { exportPuz, puzzleFileBase } from '../model/puz';
 import { authState } from '../google/auth';
 import { backupStatus } from '../sync/backup';
 import { DAYS, STATUSES, SYMMETRIES, type Day, type Puzzle, type Status, type Symmetry } from '../model/types';
-import { navigate, wide } from '../state/app';
-import { EditorSession, takePanelOnLoad, type PanelName } from '../state/editor';
+import { layout, navigate, wide } from '../state/app';
+import { EditorSession, takePanelOnLoad, type EditorMode, type PanelName, type SideTab } from '../state/editor';
+import { ClueModeScreen } from './ClueMode';
 import { AutofillPanel, SelectBanner } from './AutofillPanel';
 import { CheckPanel } from './CheckPanel';
 import { ClueEditor } from './Clue';
@@ -20,6 +21,7 @@ import {
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
+  IconClose,
   IconClue,
   IconFill,
   IconMore,
@@ -74,11 +76,12 @@ export function EditorScreen({ id }: { id: string }) {
 
 function Editor({ s }: { s: EditorSession }) {
   usePhysicalKeyboard(s);
-  const isWide = wide.value;
-  return (
-    <div class={`screen editor ${isWide ? 'editor-wide' : 'editor-cover'}`}>
-      <EditorHeader s={s} />
-      {isWide ? (
+  const lay = layout.value;
+  if (s.mode.value === 'clue') return <ClueModeScreen s={s} layout={lay} header={<EditorHeader s={s} compact />} />;
+  if (lay === 'inner-landscape') {
+    return (
+      <div class="screen editor editor-wide" data-layout={lay}>
+        <EditorHeader s={s} />
         <div class="editor-body">
           <div class="editor-left">
             <Grid s={s} />
@@ -86,25 +89,69 @@ function Editor({ s }: { s: EditorSession }) {
             <Keyboard s={s} />
           </div>
           <div class="editor-right">
-            <ToolRow s={s} wide />
+            <ToolRow s={s} variant="wide" />
             <SidePanel s={s} />
           </div>
         </div>
+      </div>
+    );
+  }
+  if (lay === 'inner-portrait') {
+    // Grid at full width, sized so clue bar, tool row and keyboard always fit below it;
+    // panels open as a bottom sheet over the keyboard area.
+    const open = s.panel.value && s.panel.value !== 'select';
+    return (
+      <div class="screen editor editor-portrait" data-layout={lay}>
+        <EditorHeader s={s} />
+        <Grid s={s} />
+        <ClueBar s={s} />
+        <ToolRow s={s} variant="portrait" />
+        {open ? (
+          <div class="sheet portrait-sheet" role="dialog" aria-label="Panel">
+            <SidePanel s={s} sheet />
+          </div>
+        ) : (
+          <Keyboard s={s} />
+        )}
+      </div>
+    );
+  }
+  return (
+    <div class={`screen editor editor-cover${lay === 'phone' ? ' editor-phone' : ''}`} data-layout={lay}>
+      <EditorHeader s={s} />
+      <Grid s={s} />
+      <ClueBar s={s} />
+      {s.panel.value === 'clue' && <ClueEditor s={s} full onClose={() => (s.panel.value = null)} />}
+      {s.panel.value ? (
+        <PanelSheet s={s} />
       ) : (
         <>
-          <Grid s={s} />
-          <ClueBar s={s} />
-          {s.panel.value === 'clue' && <ClueEditor s={s} full onClose={() => (s.panel.value = null)} />}
-          {s.panel.value ? (
-            <PanelSheet s={s} />
-          ) : (
-            <>
-              <ToolRow s={s} />
-              <Keyboard s={s} />
-            </>
-          )}
+          <ToolRow s={s} />
+          <Keyboard s={s} />
         </>
       )}
+    </div>
+  );
+}
+
+/** Construct | Clue switch in the editor header. */
+function ModeSwitch({ s }: { s: EditorSession }) {
+  const m = s.mode.value;
+  const opt = (value: EditorMode, label: string) => (
+    <button
+      role="radio"
+      aria-checked={m === value}
+      class={`seg${m === value ? ' on' : ''}`}
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={() => s.setMode(value)}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div class="mode-switch" role="radiogroup" aria-label="Editor mode">
+      {opt('construct', 'Construct')}
+      {opt('clue', 'Clue')}
     </div>
   );
 }
@@ -138,7 +185,7 @@ function downloadPuz(p: Puzzle): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-function EditorHeader({ s }: { s: EditorSession }) {
+function EditorHeader({ s, compact = false }: { s: EditorSession; compact?: boolean }) {
   const p = s.puzzle.value;
   const [menu, setMenu] = useState(false);
   const [dialog, setDialog] = useState<null | 'rename' | 'settings' | 'delete'>(null);
@@ -166,7 +213,7 @@ function EditorHeader({ s }: { s: EditorSession }) {
   ];
 
   return (
-    <header class="topbar editor-head">
+    <header class={`topbar editor-head${compact ? ' compact' : ''}`}>
       <button class="icon-btn" aria-label="Back to puzzles" onClick={() => navigate({ name: 'home' })}>
         <IconBack />
       </button>
@@ -179,6 +226,7 @@ function EditorHeader({ s }: { s: EditorSession }) {
           {saveText(s)}
         </div>
       </div>
+      <ModeSwitch s={s} />
       <button class="pill-btn" disabled={!s.canUndo.value} onClick={() => s.undo()} aria-label="Undo">
         <IconUndo size={18} />
         <span>Undo</span>
@@ -338,7 +386,9 @@ function ClueBar({ s }: { s: EditorSession }) {
 
 const LONG_PRESS_MS = 450;
 
-function ToolRow({ s, wide: isWide = false }: { s: EditorSession; wide?: boolean }) {
+function ToolRow({ s, variant = 'cover' }: { s: EditorSession; variant?: 'cover' | 'wide' | 'portrait' }) {
+  const isWide = variant === 'wide';
+  const withRebus = variant !== 'cover';
   const [blockMenu, setBlockMenu] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longFired = useRef(false);
@@ -380,7 +430,7 @@ function ToolRow({ s, wide: isWide = false }: { s: EditorSession; wide?: boolean
   );
 
   return (
-    <div class={`toolrow${isWide ? ' toolrow-wide' : ''}`}>
+    <div class={`toolrow toolrow-${variant}`}>
       {tool('select', 'Select', IconSelect, 'tool-select')}
       {!isWide && tool('fill', 'Fill', IconFill, 'tool-primary', matches === undefined ? undefined : matches > 999 ? '999+' : String(matches))}
       {tool('autofill', 'Autofill', IconAutofill)}
@@ -399,7 +449,7 @@ function ToolRow({ s, wide: isWide = false }: { s: EditorSession; wide?: boolean
         <span>Block</span>
         <span class="tool-dots" aria-hidden="true" />
       </button>
-      {isWide && (
+      {withRebus && (
         <button class={`tool${s.rebusMode.value ? ' on' : ''}`} onClick={() => s.toggleRebus()} aria-pressed={s.rebusMode.value}>
           <IconRebus />
           <span>Rebus</span>
@@ -459,22 +509,26 @@ function PanelSheet({ s }: { s: EditorSession }) {
   return null;
 }
 
-const TABS = ['Fill', 'Clues', 'Theme'] as const;
+const TABS: SideTab[] = ['Fill', 'Clues', 'Theme'];
+const TAB_PANEL: Record<SideTab, PanelName> = { Fill: 'fill', Clues: 'clue', Theme: 'theme' };
 
-function SidePanel({ s }: { s: EditorSession }) {
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Fill');
+/**
+ * Fill / Clues / Theme tabs, Autofill and Check. The right column on the inner screen in
+ * landscape; with `sheet`, the bottom sheet of the inner screen in portrait.
+ */
+function SidePanel({ s, sheet = false }: { s: EditorSession; sheet?: boolean }) {
   const name = s.panel.value;
   const close = () => (s.panel.value = null);
   // Tools that open a tab on the cover screen pick that tab here.
   useEffect(() => {
-    if (name === 'clue') setTab('Clues');
-    else if (name === 'theme') setTab('Theme');
-    else if (name === 'fill') setTab('Fill');
+    if (name === 'clue') s.sideTab.value = 'Clues';
+    else if (name === 'theme') s.sideTab.value = 'Theme';
+    else if (name === 'fill') s.sideTab.value = 'Fill';
   }, [name]);
   if (name === 'autofill' || name === 'check') {
     return <div class="side-panel">{name === 'autofill' ? <AutofillPanel s={s} onClose={close} /> : <CheckPanel s={s} onClose={close} />}</div>;
   }
-  const current = name === 'clue' ? 'Clues' : name === 'theme' ? 'Theme' : tab;
+  const current: SideTab = name === 'clue' ? 'Clues' : name === 'theme' ? 'Theme' : name === 'fill' ? 'Fill' : s.sideTab.value;
   return (
     <div class="side-panel">
       <div class="tabs" role="tablist">
@@ -485,13 +539,19 @@ function SidePanel({ s }: { s: EditorSession }) {
             aria-selected={t === current}
             class={`tab${t === current ? ' on' : ''}`}
             onClick={() => {
-              setTab(t);
-              if (name === 'clue' || name === 'theme') s.panel.value = null;
+              s.sideTab.value = t;
+              if (sheet) s.panel.value = TAB_PANEL[t];
+              else if (name === 'clue' || name === 'theme' || name === 'fill') s.panel.value = null;
             }}
           >
             {t}
           </button>
         ))}
+        {sheet && (
+          <button class="icon-btn tabs-close" aria-label="Close panel" onClick={close}>
+            <IconClose />
+          </button>
+        )}
       </div>
       {current === 'Fill' ? (
         <FillPanel s={s} wide />
@@ -530,6 +590,16 @@ function usePhysicalKeyboard(s: EditorSession) {
         return;
       }
       if (mod || e.altKey) return;
+      if (s.mode.value === 'clue') {
+        // Clue mode: letters go to the clue field, never into the grid.
+        if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') s.arrow(k);
+        else if (k === 'Tab') s.stepEntry(e.shiftKey ? -1 : 1);
+        else if (k === ' ') s.switchDirection();
+        else if (k === 'Enter') (document.getElementById('clue-compose') as HTMLTextAreaElement | null)?.focus();
+        else return;
+        e.preventDefault();
+        return;
+      }
       if (/^[a-zA-Z]$/.test(k)) s.typeLetter(k);
       else if (k === 'Backspace' || k === 'Delete') s.backspace();
       else if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') s.arrow(k);

@@ -145,6 +145,11 @@ export function ClueEditor({ s, onClose, full = false }: { s: EditorSession; onC
     s.commit(new Map(), new Map([[slot.id, draft.trim() ? { ...p.clues[slot.id], text: draft.trim() } : null]]));
     setNote('Clue saved');
   };
+  const toClueMode = () => {
+    if (slot && draft.trim() !== saved) s.setDraft(slot.id, draft);
+    s.focusClue = true;
+    s.setMode('clue');
+  };
   const saveIdea = async () => {
     if (!answer || !draft.trim()) return;
     await addClueIdea(data.notebook?.answer ?? answer, draft);
@@ -176,12 +181,21 @@ export function ClueEditor({ s, onClose, full = false }: { s: EditorSession; onC
       <div class="clue-body">
         {slot ? (
           <>
-            <label class="label" for="clue-draft">
-              Your clue
-            </label>
+            <div class="label-row">
+              <label class="label" for="clue-draft">
+                Your clue
+              </label>
+              <button class="btn small" onClick={toClueMode}>
+                Write in Clue mode
+              </button>
+            </div>
+            {/* Construct mode never opens the system keyboard (SPEC §3.11); a physical
+                keyboard still types here. Tapping the field switches to Clue mode. */}
             <textarea
               id="clue-draft"
               class="field clue-draft"
+              inputMode="none"
+              onClick={toClueMode}
               rows={2}
               value={draft}
               placeholder={`Clue for ${slotLabel(slot)}`}

@@ -5,7 +5,8 @@ import type { EditorSession } from '../state/editor';
 const U = 100; // SVG units per cell
 const LONG_PRESS_MS = 450;
 
-export function Grid({ s }: { s: EditorSession }) {
+/** `tapOnly` (Clue mode): a tap selects / switches direction; no select mode, focus stays in the clue field. */
+export function Grid({ s, tapOnly = false }: { s: EditorSession; tapOnly?: boolean }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState(0);
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
@@ -57,6 +58,10 @@ export function Grid({ s }: { s: EditorSession }) {
     const cell = cellFrom(e);
     if (cell === null) return;
     e.preventDefault();
+    if (tapOnly) {
+      press.current = { fired: false, timer: setTimeout(() => undefined, 0) };
+      return;
+    }
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     if (f.selectMode.peek()) {
       // tap toggles a square; dragging paints a rectangle (adding, or removing when the
@@ -123,7 +128,7 @@ export function Grid({ s }: { s: EditorSession }) {
     const x = (i % p.width) * U;
     const y = Math.floor(i / p.width) * U;
     let fill = '#FFFFFF';
-    if (selMode) {
+    if (selMode && !tapOnly) {
       if (c.b) fill = 'var(--ink)';
       else if (sel.has(i)) fill = 'var(--selection)';
       else if (c.lock) fill = 'var(--locked)';
